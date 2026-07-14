@@ -1,0 +1,56 @@
+const CACHE_NAME = 'project-a-cache-v1';
+const urlsToCache = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  // Сюда можешь дописать свои файлы стилей и картинок, например:
+  // '/style.css',
+  // '/main.js',
+  // '/logo.png'
+];
+
+// Установка Service Worker и кэширование файлов
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('Кэш открыт, загружаем файлы');
+        return cache.addAll(urlsToCache);
+      })
+  );
+  self.skipWaiting();
+});
+
+// Активация и удаление старых кэшей (чтобы сайт обновлялся у клиентов)
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('Удаляем старый кэш', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+  self.clients.claim();
+});
+
+// Перехват запросов (если нет интернета, отдаем из кэша)
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => {
+        // Если файл есть в кэше, возвращаем его
+        if (response) {
+          return response;
+        }
+        // Иначе скачиваем из интернета
+        return fetch(event.request).catch(() => {
+          console.log('Нет сети и нет в кэше');
+        });
+      })
+  );
+});

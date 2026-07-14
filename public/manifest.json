@@ -1,0 +1,16 @@
+{
+  "short_name": "Amina",
+  "name": "Кафе Amina",
+  "icons": [
+    {
+      "src": "/amina-logo.png.jpg",
+      "type": "image/jpeg",
+      "sizes": "192x192"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "#111827"
+}

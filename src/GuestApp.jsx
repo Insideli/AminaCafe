@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
-export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt, t }) {
+export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
@@ -33,6 +33,52 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
   const [activeStory, setActiveStory] = useState(null);
+
+  // СЛОВАРЬ ПЕРЕВОДОВ ИНТЕРФЕЙСА (Именно его не хватало для работы!)
+  const t = {
+    menu: lang === 'ru' ? 'Меню' : 'Мәзір',
+    halls: lang === 'ru' ? 'Залы' : 'Залдар',
+    cart: lang === 'ru' ? 'Корзина' : 'Себет',
+    profile: lang === 'ru' ? 'Профиль' : 'Профиль',
+    inCart: lang === 'ru' ? 'В корзине' : 'Себетте',
+    pay: lang === 'ru' ? 'Оплатить' : 'Төлеу',
+    inHall: lang === 'ru' ? 'В зале' : 'Залда',
+    takeaway: lang === 'ru' ? 'Навынос' : 'Өзімен алып кету',
+    delivery: lang === 'ru' ? 'Доставка' : 'Жеткізу',
+    cats: lang === 'ru' ? 'Категории' : 'Санаттар',
+    allHalls: lang === 'ru' ? 'Все залы' : 'Барлық залдар',
+    emptyCart: lang === 'ru' ? 'Корзина пуста' : 'Себет бос',
+    orderHistory: lang === 'ru' ? 'История заказов' : 'Тапсырыстар тарихы',
+    noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.',
+    payMethod: lang === 'ru' ? 'Метод оплаты' : 'Төлем әдісі',
+    payApple: 'Apple Pay / Google Pay',
+    payCard: lang === 'ru' ? 'Привязать карту' : 'Картаны тіркеу',
+    payKaspi: lang === 'ru' ? 'Kaspi Перевод' : 'Kaspi Аударым',
+    payCash: lang === 'ru' ? 'Наличными' : 'Қолма-қол',
+    addressPrompt: lang === 'ru' ? 'Куда доставить?' : 'Қайда жеткізу керек?',
+    mapLink: lang === 'ru' ? 'Улица или ссылка с карты' : 'Көше немесе картадан сілтеме',
+    house: lang === 'ru' ? 'Дом' : 'Үй',
+    apt: lang === 'ru' ? 'Квартира' : 'Пәтер',
+    comment: lang === 'ru' ? 'Комментарий курьеру' : 'Курьерге пікір',
+    reviewPrompt: lang === 'ru' ? 'Как вам обслуживание?' : 'Қызмет көрсету қалай болды?',
+    sendReview: lang === 'ru' ? 'Отправить отзыв' : 'Пікір жіберу',
+    later: lang === 'ru' ? 'Не сейчас' : 'Қазір емес',
+    installApp: lang === 'ru' ? 'Установить приложение' : 'Қосымшаны орнату',
+    login: lang === 'ru' ? 'Войти' : 'Кіру',
+    register: lang === 'ru' ? 'Регистрация' : 'Тіркелу',
+    cashback: lang === 'ru' ? 'Кэшбек' : 'Кэшбек',
+    logout: lang === 'ru' ? 'Выйти из аккаунта' : 'Аккаунттан шығу',
+    noAuthMsg: lang === 'ru' ? 'Войдите в систему или создайте карту лояльности за 10 секунд, чтобы получать кэшбек с каждого заказа и бронировать столики.' : 'Әр тапсырыстан кэшбек алу және үстелдерді брондау үшін жүйеге кіріңіз немесе 10 секунд ішінде тіркеліңіз.',
+    yourTable: lang === 'ru' ? '🔒 Ваш стол' : '🔒 Сіздің үстеліңіз',
+    waiterCall: lang === 'ru' ? '🛎️ Официант' : '🛎️ Даяшы',
+    sit: lang === 'ru' ? 'Сесть' : 'Отыру',
+    book: lang === 'ru' ? 'Бронь' : 'Брондау',
+    occupied: lang === 'ru' ? 'Занято' : 'Бос емес',
+    payWait: lang === 'ru' ? 'Проверка платежа...' : 'Төлемді тексеру...',
+    payReject: lang === 'ru' ? 'Перевод не найден' : 'Аударым табылмады',
+    paySuccess: lang === 'ru' ? 'Оплата прошла!' : 'Төлем сәтті өтті!',
+    confirm: lang === 'ru' ? 'Подтвердить' : 'Растау'
+  };
 
   const handleInstallClick = () => {
     if (deferredPrompt) {
@@ -109,7 +155,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name[lang] || i.name.ru || i.name} (x${i.quantity})`).join(', ') : (lang === 'ru' ? "Бронь места" : "Орынды брондау");
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
     
-    // ЛОГИКА СМЕНЫ (УМНАЯ КАССА) - Смена до 6 утра считается "вчерашней"
     const now = new Date();
     const shiftDate = new Date(now);
     if (now.getHours() < 6) shiftDate.setDate(shiftDate.getDate() - 1);
@@ -293,7 +338,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       {showIOSInstallGuide && (
          <div className="payment-overlay" onClick={() => setShowIOSInstallGuide(false)}>
            <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', padding: '40px 20px'}}>
-              <h2 style={{margin: '0 0 15px 0', fontSize: '22px', color: '#111827'}}>{lang === 'ru' ? 'Как установить приложение?' : 'Қосымшаны қалай орнатуға болады?'}</h2>
+              <h2 style={{margin: '0 0 15px 0', fontSize: '22px', color: '#111827'}}>{t.installApp}</h2>
               <p style={{color: '#6b7280', marginBottom: '25px', lineHeight: '1.5', fontSize: '15px'}}>
                  {lang === 'ru' ? 'Чтобы добавить Кафе Amina на главный экран телефона, нажмите внизу экрана на кнопку ' : 'Amina кафесін телефонның бас экранына қосу үшін, экранның төменгі жағындағы '} 
                  <b style={{color: '#3b82f6'}}>«Поделиться»</b> 
@@ -301,7 +346,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                  {lang === 'ru' ? 'и выберите пункт ' : 'түймесін басып, '}
                  <b style={{color: '#111827'}}>«На экран Домой» ➕</b>.
               </p>
-              <button onClick={() => setShowIOSInstallGuide(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer'}}>Понятно</button>
+              <button onClick={() => setShowIOSInstallGuide(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer'}}>{t.confirm}</button>
            </div>
          </div>
       )}
@@ -413,7 +458,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
                   <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
-                  <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>{lang === 'ru' ? 'Безопасный перевод' : 'Қауіпсіз аударым'}</h2>
+                  <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>{t.payKaspi}</h2>
                 </div>
                 
                 <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>{lang === 'ru' ? 'Скопируйте номер карты и переведите точную сумму.' : 'Карта нөмірін көшіріп, дәл соманы аударыңыз.'}</p>
@@ -456,7 +501,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
                 <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#dc2626'}}>{t.payReject}</h2>
-                <button onClick={() => setPaymentStatus('kaspi_card')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>ОК</button>
+                <button onClick={() => setPaymentStatus('kaspi_card')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>OK</button>
               </div>
             )}
 

@@ -13,6 +13,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [adminTab, setAdminTab] = useState('stats'); 
   const [newItem, setNewItem] = useState({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' });
   
+  // ФИЛЬТРЫ ДЛЯ ДИРЕКТОРА И ШЕФА
+  const [adminMenuCategory, setAdminMenuCategory] = useState('all');
+  const [adminStaffRole, setAdminStaffRole] = useState('all');
+  const [chefMenuCategory, setChefMenuCategory] = useState('all');
+  
   const [editStaffModal, setEditStaffModal] = useState(false);
   const [editStaffOriginalPhone, setEditStaffOriginalPhone] = useState('');
   const [editStaffData, setEditStaffData] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', station: 'hot', isSenior: false, onShift: true, kaspi: '' });
@@ -56,7 +61,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     else { const reason = prompt(`Укажите причину стопа для "${item.name}":`, "Закончились ингредиенты"); if (reason !== null) setMenu(prev => (prev || []).map(m => m.id === id ? { ...m, isStop: true, stopReason: reason } : m)); }
   };
 
-  const handleAddMenuItem = () => { if(!newItem.name || !newItem.price) return alert("Заполните поля!"); setMenu(prev => [{ ...newItem, id: 'm' + Date.now(), price: Number(newItem.price), imgUrl: "", isStop: false, stopReason: "" }, ...(prev || [])]); setNewItem({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' }); alert("Блюдо добавлено!"); };
+  const handleAddMenuItem = () => { if(!newItem.name || !newItem.price) return alert("Заполните название и цену!"); setMenu(prev => [{ ...newItem, id: 'm' + Date.now(), price: Number(newItem.price), imgUrl: "", isStop: false, stopReason: "" }, ...(prev || [])]); setNewItem({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' }); alert("Блюдо добавлено!"); };
   
   const handlePhotoUpload = (e, id) => {
     const file = e.target.files[0];
@@ -333,6 +338,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
   // ЭКРАН ШЕФ-ПОВАРА
   if (currentUser.role === 'chef') {
+    const displayedChefMenu = chefMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === chefMenuCategory);
+
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial' }}>
         <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -341,18 +348,26 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         </header>
         <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
           <h3 style={{color: '#111827'}}>Управление стоп-листом и Фото:</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
-            {(menu || []).map(item => (
+          
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
+            {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setChefMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: chefMenuCategory === cat.id ? '#111827' : '#f3f4f6', color: chefMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {displayedChefMenu.map(item => (
               <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', display: 'grid', gridTemplateColumns: '50px 1fr auto auto', gap: '15px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
                 <div style={{fontSize: '30px', textAlign: 'center'}}>{item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}</div>
-                <div><p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827' }}>{item.name}</p>{item.isStop && <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#dc2626' }}>Стоп: {item.stopReason}</p>}</div>
+                <div style={{minWidth: 0}}>
+                  <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>
+                  {item.isStop && <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#dc2626' }}>Стоп: {item.stopReason}</p>}
+                </div>
                 
-                <label style={{ cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', textAlign: 'center' }}>
+                <label style={{ cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', textAlign: 'center', fontSize: '12px', whiteSpace: 'nowrap' }}>
                   📷 Фото
                   <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => handlePhotoUpload(e, item.id)} />
                 </label>
 
-                <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+                <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
               </div>
             ))}
           </div>
@@ -499,6 +514,18 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const displayedReviews = reviewFilter === 'all' ? (reviews || []) : (reviews || []).filter(r => r.rating === parseInt(reviewFilter));
     const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
     const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
+
+    // ФИЛЬТРАЦИЯ МЕНЮ ДЛЯ АДМИНА
+    const displayedAdminMenu = adminMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === adminMenuCategory);
+    
+    // ФИЛЬТРАЦИЯ ПЕРСОНАЛА ДЛЯ АДМИНА
+    const staffRolesList = [
+      { id: 'all', name: 'Все' },
+      { id: 'waiter', name: 'Официанты' },
+      { id: 'cook', name: 'Повара' },
+      { id: 'cashier', name: 'Кассиры' },
+      { id: 'chef', name: 'Шефы' }
+    ];
 
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
@@ -662,12 +689,14 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* --- МЕНЮ (РОВНАЯ ТАБЛИЦА + КАМЕРА + СТОП) --- */}
+        {/* --- МЕНЮ (С ФИЛЬТРОМ И ИНГРЕДИЕНТАМИ) --- */}
         {adminTab === 'menu' && (
           <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+            
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
               <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить блюдо:</h4>
               <input type="text" placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+              <input type="text" placeholder="Ингредиенты (например: говядина, лук, соус)" value={newItem.ingredients} onChange={e => setNewItem({...newItem, ingredients: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
               <div style={{display: 'flex', gap: '10px'}}>
                  <input type="number" placeholder="Цена" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
                  <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}>{CATEGORIES.filter(c=>c.id!=='all').map(c=>(<option key={c.id} value={c.id}>{c.name}</option>))}</select>
@@ -676,8 +705,14 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             </div>
 
             <h3 style={{color: '#111827', marginBottom: '15px'}}>Управление меню:</h3>
+            
+            {/* ФИЛЬТР КАТЕГОРИЙ ДЛЯ АДМИНА */}
+            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
+              {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(menu || []).map(item => (
+              {displayedAdminMenu.map(item => (
                 <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
                   
                   {/* Картинка / Смайл */}
@@ -709,7 +744,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* --- ПЕРСОНАЛ (С РЕДАКТИРОВАНИЕМ И КАССИРОМ) --- */}
+        {/* --- ПЕРСОНАЛ (С ФИЛЬТРОМ) --- */}
         {adminTab === 'staff' && (
           <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
@@ -742,7 +777,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               <button onClick={handleAddWaiter} style={{ width: '100%', padding: '14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Добавить сотрудника</button>
             </div>
             
-            {Object.entries(roles || {}).filter(([phone, data]) => data.role !== 'admin').map(([phone, data]) => (
+            {/* ФИЛЬТР ПЕРСОНАЛА ДЛЯ АДМИНА */}
+            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
+              {staffRolesList.map(role => (<button key={role.id} onClick={() => setAdminStaffRole(role.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminStaffRole === role.id ? '#8b5cf6' : '#f3f4f6', color: adminStaffRole === role.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{role.name}</button>))}
+            </div>
+
+            {Object.entries(roles || {}).filter(([phone, data]) => data.role !== 'admin' && (adminStaffRole === 'all' || data.role === adminStaffRole)).map(([phone, data]) => (
               <div key={phone} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>

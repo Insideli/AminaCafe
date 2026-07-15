@@ -25,6 +25,16 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const t = {
     logout: lang === 'ru' ? 'Выйти' : 'Шығу'
   };
+
+  // ФИЛЬТРЫ ДЛЯ ПЕРСОНАЛА (Именно из-за отсутствия этой переменной Vercel выдавал ошибку!)
+  const STAFF_FILTERS = [
+    { id: 'all', name: 'Все' }, 
+    { id: 'waiter', name: 'Официанты' }, 
+    { id: 'cook', name: 'Повара' }, 
+    { id: 'chef', name: 'Шеф' }, 
+    { id: 'cashier', name: 'Кассиры' }, 
+    { id: 'admin', name: 'Админы' }
+  ];
   
   // УМНАЯ КАССА (Смены)
   const now = new Date();
@@ -50,7 +60,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           const bookDate = new Date();
           bookDate.setHours(bookH, bookM, 0, 0);
           
-          // Если бронь на следующий день после полуночи - пропускаем сложную логику в MVP
           const diffMins = (currentTime - bookDate) / (1000 * 60);
           
           // Опоздание больше 30 минут -> СНИМАЕМ БРОНЬ АВТОМАТИЧЕСКИ
@@ -101,7 +110,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
   const [posCart, setPosCart] = useState({});
-  const [showWaiterMenu, setShowWaiterMenu] = useState(false);
+  const [showWaiterMenu, setShowWaiterMenu] = useState(false); // Меню поверх экрана
 
   // --- СОСТОЯНИЯ КАССИРА ---
   const [cashierTab, setCashierTab] = useState('orders'); 
@@ -283,7 +292,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
-    // ЗАГЛУШКА ДЛЯ PALOMA365
     console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: table?.name, items: text, total });
 
     const newOrder = { 
@@ -332,7 +340,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
-    // ЗАГЛУШКА ДЛЯ PALOMA365
     console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: cashierOrderType, items: text, total });
 
     const newOrder = { 
@@ -345,15 +352,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     };
     setOrders(prev => [newOrder, ...(prev || [])]); setCashierCart({}); alert('Заказ оплачен и отправлен на принтер кухни!');
   };
-
-  const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
-  const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
-
-  const STAFF_FILTERS = [
-    { id: 'all', name: 'Все' }, { id: 'waiter', name: 'Официанты' }, 
-    { id: 'cook', name: 'Повара' }, { id: 'chef', name: 'Шеф' }, 
-    { id: 'cashier', name: 'Кассиры' }, { id: 'admin', name: 'Админы' }
-  ];
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px', overflowX: 'hidden', width: '100vw', maxWidth: '100vw' }}>
@@ -379,12 +377,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#f3f4f6', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
             <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#f3f4f6', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
             <button onClick={() => setAdminTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'tables' ? '#ec4899' : '#f3f4f6', color: adminTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
-            <button onClick={() => setAdminTab('reviews')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'reviews' ? '#14b8a6' : '#f3f4f6', color: adminTab === 'reviews' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>⭐️ Отзывы</button>
           </div>
           
           {/* ВЫРУЧКА */}
           {adminTab === 'stats' && (
-            <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h3 style={{color: '#111827', margin: 0}}>Смена:</h3>
                 <select value={reportDate} onChange={e => setReportDate(e.target.value)} style={{ padding: '10px', borderRadius: '10px', border: '2px solid #111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
@@ -627,7 +624,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                                  </div>
                               )}
                               {t.status !== 'free' && (
-                                 <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false, bookedTime: null } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{t.status === 'booked' ? 'Снять бронь (Опоздал)' : 'Освободить стол'}</button>
+                                 <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false, bookedTime: null } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{t.status === 'booked' ? 'Снять бронь (Неявка)' : 'Освободить стол'}</button>
                               )}
                            </div>
                          )
@@ -636,37 +633,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                   </div>
                 );
               })}
-            </div>
-          )}
-
-          {/* ОТЗЫВЫ */}
-          {adminTab === 'reviews' && (
-            <div style={{ padding: '20px', maxWidth: '700px', margin: '0 auto' }}>
-               <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
-                 {['all', '5', '4', '3', '2', '1'].map(star => (
-                   <button key={star} onClick={() => setReviewFilter(star)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #d1d5db', background: reviewFilter === star ? '#111827' : '#fff', color: reviewFilter === star ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>
-                     {star === 'all' ? 'Все' : `${star} ⭐️`}
-                   </button>
-                 ))}
-               </div>
-
-               {displayedReviews.length === 0 ? <p style={{textAlign: 'center', color: '#6b7280'}}>Отзывов пока нет.</p> : 
-                 displayedReviews.map(rev => (
-                   <div key={rev.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '15px' }}>
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px'}}>
-                         <div>
-                            <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{rev.author}</p>
-                            <p style={{margin: 0, fontSize: '13px', color: '#6b7280'}}>Обслуживал: {rev.targetName}</p>
-                         </div>
-                         <div style={{textAlign: 'right'}}>
-                            <p style={{margin: '0 0 5px 0', color: '#f59e0b', fontSize: '18px'}}>{'★'.repeat(rev.rating)}{'☆'.repeat(5-rev.rating)}</p>
-                            <p style={{margin: 0, fontSize: '12px', color: '#9ca3af'}}>{rev.date}</p>
-                         </div>
-                      </div>
-                      {rev.text && <p style={{margin: '10px 0 0 0', padding: '12px', background: '#f9fafb', borderRadius: '8px', fontSize: '14px', color: '#4b5563'}}>{rev.text}</p>}
-                   </div>
-                 ))
-               }
             </div>
           )}
         </>
@@ -797,7 +763,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         
                         <div style={{display: 'flex', gap: '5px'}}>
                           <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
-                             {isReallyActive ? 'Скрыть' : 'Опубликовать заново'}
+                             {isReallyActive ? 'Скрыть у гостей' : 'Опубликовать заново'}
                           </button>
                         </div>
                       </div>
@@ -810,7 +776,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {cashierTab === 'report' && (
             <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-              
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h3 style={{color: '#111827', margin: 0}}>Смена:</h3>
                 <select value={reportDate} onChange={e => setReportDate(e.target.value)} style={{ padding: '10px', borderRadius: '10px', border: '2px solid #111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
@@ -980,7 +945,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                 return (
                   <div key={order.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', borderTop: '8px solid #3b82f6', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
                     <h4 style={{color: '#111827', margin: '0 0 10px 0'}}>Стол: {order.tableName}</h4>
-                    {order.deliveryAddress && <p style={{fontSize: '13px', color: '#4b5563', padding: '8px', background: '#f3f4f6', borderRadius: '8px'}}>{order.deliveryAddress}</p>}
+                    {order.deliveryAddress && <p style={{fontSize: '13px', color: '#4b5563', padding: '8px', background: '#f3f4f6', borderRadius: '8px'}}>{renderTextWithLinks(order.deliveryAddress)}</p>}
                     <div style={{ backgroundColor: '#f9fafb', padding: '10px', borderRadius: '8px', margin: '10px 0', color: '#111827' }}>
                       {items.map((item, idx) => (
                         <div key={idx} style={{ padding: '5px 0', fontSize: '16px', fontWeight: 'bold', borderBottom: idx !== items.length -1 ? '1px solid #e5e7eb' : 'none' }}>

@@ -8,7 +8,6 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
   const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
-  
   const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); 
   const [reviews] = useLocalStorage('amina_reviews_v11', []);
 
@@ -52,7 +51,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const allDates = [...new Set((orders || []).map(o => o.fullDate))].sort().reverse();
   if (!allDates.includes(todayDateStr)) allDates.unshift(todayDateStr);
 
-  // === АВТО-СНЯТИЕ БРОНИ (ИСПРАВЛЕННЫЙ ТАЙМЕР) ===
+  // === АВТО-СНЯТИЕ БРОНИ (ЧЕРЕЗ 30 МИНУТ) ===
   useEffect(() => {
     const interval = setInterval(() => {
       setTables(prev => {
@@ -85,7 +84,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const notifyBanner = callingTables.length > 0 ? (
     <div style={{ background: '#ef4444', color: '#fff', padding: '15px', textAlign: 'center', fontWeight: '900', fontSize: '16px', position: 'sticky', top: 0, zIndex: 9999, boxShadow: '0 4px 10px rgba(239,68,68,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
       <span>🚨 ВНИМАНИЕ! Столы: {callingTables.map(tab => tab.name).join(', ')}</span>
-      <button onClick={() => setTables(prev => prev.map(tab => ({...tab, isCalling: false, isCallingForBill: false})))} style={{ background: '#fff', color: '#ef4444', border: 'none', borderRadius: '8px', padding: '5px 15px', fontWeight: 'bold', cursor: 'pointer' }}>Понял</button>
+      <button onClick={() => setTables(prev => (prev || []).map(tab => ({...tab, isCalling: false, isCallingForBill: false})))} style={{ background: '#fff', color: '#ef4444', border: 'none', borderRadius: '8px', padding: '5px 15px', fontWeight: 'bold', cursor: 'pointer' }}>Понял</button>
     </div>
   ) : null;
 
@@ -138,7 +137,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                return (
                  <div key={phone} onClick={() => {
                     setActiveChatPhone(phone);
-                    setChats(prev => prev.map(c => c.from === phone ? {...c, isRead: true} : c));
+                    setChats(prev => (prev || []).map(c => c.from === phone ? {...c, isRead: true} : c));
                  }} style={{ background: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                    <div style={{minWidth: 0, paddingRight: '10px'}}>
                      <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{guestName}</p>
@@ -325,7 +324,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
     );
   };
 
-  const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: ((prev || {})[item.id]?.quantity || 0) + 1 } }));
+  const addToCashierCart = (item) => setCashierCart(prev => ({ ...(prev || {}), [item.id]: { ...item, quantity: ((prev || {})[item.id]?.quantity || 0) + 1 } }));
   const removeFromCashierCart = (id) => { setCashierCart(prev => { const updated = { ...(prev || {}) }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; }); };
   
   const submitCashierOrder = (payMethod) => {
@@ -451,10 +450,10 @@ export default function StaffApp({ currentUser, logout, lang }) {
                         <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: '#ea580c'}}>👁 Просмотров: {s.viewedBy ? s.viewedBy.length : 0}</p>
                         
                         <div style={{display: 'flex', gap: '5px'}}>
-                          <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
+                          <button onClick={() => setStoriesDb(prev => (prev || []).map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
                              {isReallyActive ? 'Скрыть у гостей' : 'Опубликовать заново (24ч)'}
                           </button>
-                          <button onClick={() => setStoriesDb(prev => prev.filter(st => st.id !== s.id))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>Удалить</button>
+                          <button onClick={() => setStoriesDb(prev => (prev || []).filter(st => st.id !== s.id))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>Удалить</button>
                         </div>
                       </div>
                     </div>
@@ -464,7 +463,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
             </div>
           )}
 
-          {/* МЕНЮ С ФИКСИРОВАННОЙ СЕТКОЙ ДЛЯ СТАБИЛЬНОСТИ */}
+          {/* МЕНЮ */}
           {adminTab === 'menu' && (
             <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
@@ -709,7 +708,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                                  changeOrderStatus(o.id, 'rejected');
                                  // Если отклонили задаток - снимаем бронь
                                  if (o.tableName.includes("Задаток")) {
-                                    setTables(prev => prev.map(t => t.id === o.tableId ? {...t, status: 'free', bookedBy: null, bookedTime: null} : t));
+                                    setTables(prev => (prev || []).map(t => t.id === o.tableId ? {...t, status: 'free', bookedBy: null, bookedTime: null} : t));
                                  }
                                }} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Денег нет</button>
                             </div>
@@ -727,8 +726,8 @@ export default function StaffApp({ currentUser, logout, lang }) {
                     <h3 style={{ color: '#991b1b', margin: '0 0 10px 0' }}>🏃 Гость подошел к кассе ({table.name})</h3>
                     <p style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#111827', fontWeight: 'bold' }}>К оплате: {orderForTable?.total || '?'} ₸</p>
                     <div style={{display: 'flex', gap: '10px'}}>
-                      <button onClick={() => { setTables(prev => prev.map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); }} style={{ flex: 1, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
-                      <button onClick={() => { setTables(prev => prev.map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'cash'); }} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
+                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); }} style={{ flex: 1, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
+                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'cash'); }} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
                     </div>
                   </div>
                 )
@@ -736,7 +735,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
             </div>
           )}
 
-          {/* ИСПРАВЛЕННЫЙ ТЕРМИНАЛ КАССИРА (ЖЕСТКАЯ ВЫСОТА) */}
+          {/* ИСПРАВЛЕННЫЙ ТЕРМИНАЛ КАССИРА */}
           {cashierTab === 'pos' && (
             <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: '160px', bottom: 0, left: 0, right: 0, background: '#f9fafb' }}>
               <div style={{ padding: '15px', background: '#fff', display: 'flex', gap: '10px', flexShrink: 0 }}>
@@ -748,9 +747,9 @@ export default function StaffApp({ currentUser, logout, lang }) {
                   <div key={item.id} style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '12px', marginBottom: '10px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
                      <div style={{ minWidth: 0, overflow: 'hidden' }}><p style={{margin: 0, fontWeight: 'bold', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{item.name}</p><p style={{margin: '2px 0 0 0', color: '#6b7280', fontSize: '13px'}}>{item.price} ₸</p></div>
                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                       <button onClick={() => setCashierCart(prev => { const updated = { ...prev }; if (!updated[item.id]) return prev; if (updated[item.id].quantity === 1) delete updated[item.id]; else updated[item.id].quantity -= 1; return updated; })} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827', cursor: 'pointer', fontWeight: 'bold' }}>-</button>
+                       <button onClick={() => setCashierCart(prev => { const updated = { ...(prev || {}) }; if (!updated[item.id]) return prev; if (updated[item.id].quantity === 1) delete updated[item.id]; else updated[item.id].quantity -= 1; return updated; })} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827', cursor: 'pointer', fontWeight: 'bold' }}>-</button>
                        <span style={{fontWeight: 'bold', color: '#111827'}}>{(cashierCart || {})[item.id]?.quantity || 0}</span>
-                       <button disabled={item.isStop} onClick={() => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }))} style={{ width: '36px', height: '36px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}>+</button>
+                       <button disabled={item.isStop} onClick={() => setCashierCart(prev => ({ ...(prev || {}), [item.id]: { ...item, quantity: ((prev[item.id] || {}).quantity || 0) + 1 } }))} style={{ width: '36px', height: '36px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}>+</button>
                      </div>
                   </div>
                 ))}
@@ -814,13 +813,13 @@ export default function StaffApp({ currentUser, logout, lang }) {
                       <div style={{flex: 1}}>
                         <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title.ru || s.title}</p>
                         <p style={{margin: '0 0 5px 0', fontSize: '11px', color: '#6b7280'}}>Загружено: {new Date(s.timestamp).toLocaleDateString('ru-RU')}</p>
-                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: '#ea580c'}}>👁 Просмотров: {s.viewedBy ? s.viewedBy.length : 0}</p>
+                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: '#ea580c'}}>👁 Просмотров: {(s.viewedBy || []).length}</p>
                         
                         <div style={{display: 'flex', gap: '5px'}}>
-                          <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
+                          <button onClick={() => setStoriesDb(prev => (prev || []).map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
                              {isReallyActive ? 'Скрыть у гостей' : 'Опубликовать заново (24ч)'}
                           </button>
-                          <button onClick={() => setStoriesDb(prev => prev.filter(st => st.id !== s.id))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>Удалить</button>
+                          <button onClick={() => setStoriesDb(prev => (prev || []).filter(st => st.id !== s.id))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>Удалить</button>
                         </div>
                       </div>
                     </div>
@@ -875,7 +874,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
       )}
 
       {/* ==========================================
-          ЭКРАН 3: ОФИЦИАНТ (СТАБИЛИЗИРОВАННЫЙ ЭКРАН)
+          ЭКРАН 3: ОФИЦИАНТ
       ========================================== */}
       {currentUser.role === 'waiter' && (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflowX: 'hidden' }}>
@@ -890,7 +889,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                       const currentTotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
                       if (currentTotal <= 0) return;
                       const discountAmount = Math.round(currentTotal * 0.1);
-                      setPosCart(prev => ({ ...prev, 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
+                      setPosCart(prev => ({ ...(prev || {}), 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
                   }} style={{width: '100%', padding: '10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer'}}>🎁 Применить скидку -10%</button>}
                   {(menu || []).map(item => (
                     <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
@@ -927,15 +926,15 @@ export default function StaffApp({ currentUser, logout, lang }) {
           <div style={{padding: '20px', maxWidth: '600px', margin: '0 auto', width: '100%', boxSizing: 'border-box'}}>
             
             <h3 style={{color: '#065f46', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px'}}>🛎 Мои активные столы</h3>
-            {tables.filter(t => t.servedBy === currentUser.phone).length === 0 ? <p style={{color: '#6b7280', marginBottom: '30px'}}>У вас пока нет активных столов.</p> : (
+            {(tables || []).filter(t => t.servedBy === currentUser.phone).length === 0 ? <p style={{color: '#6b7280', marginBottom: '30px'}}>У вас пока нет активных столов.</p> : (
               <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '30px'}}>
-                {tables.filter(t => t.servedBy === currentUser.phone).map(t => (
+                {(tables || []).filter(t => t.servedBy === currentUser.phone).map(t => (
                   <div key={t.id} style={{ background: t.isCalling ? '#fef3c7' : '#fff', border: '2px solid #10b981', borderRadius: '16px', padding: '15px', textAlign: 'center', position: 'relative' }}>
                     {t.isCalling && <span style={{position: 'absolute', top: '-10px', right: '-10px', fontSize: '24px'}}>🚨</span>}
                     <h4 style={{margin: '0 0 10px 0', fontSize: '16px', color: '#111827'}}>{t.name}</h4>
                     <div style={{display: 'flex', gap: '8px'}}>
                       <button onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ flex: 1, padding: '10px', background: '#111827', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>+ Чек</button>
-                      <button onClick={() => setTables(prev => prev.map(tab => tab.id === t.id ? {...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false} : tab))} style={{ padding: '10px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>✕</button>
+                      <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? {...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false} : tab))} style={{ padding: '10px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>✕</button>
                     </div>
                   </div>
                 ))}
@@ -944,7 +943,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
 
             <h3 style={{color: '#111827', marginBottom: '15px'}}>Все свободные столы:</h3>
             <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px'}}>
-              {tables.filter(t => t.status === 'free').map(t => (
+              {(tables || []).filter(t => t.status === 'free').map(t => (
                 <div key={t.id} onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '15px 10px', textAlign: 'center', cursor: 'pointer' }}>
                   <p style={{margin: '0 0 5px 0', fontWeight: 'bold', fontSize: '14px', color: '#111827'}}>{t.name}</p>
                   <span style={{fontSize: '11px', color: '#6b7280'}}>Занять</span>
@@ -956,7 +955,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
 
           </div>
 
-          {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА (КРАСИВО ПОВЕРХ) */}
+          {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА */}
           {showWaiterMenu && (
              <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', width: '100vw' }}>
                <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -302,9 +302,9 @@ export const CATEGORIES = [
 ];
 
 export const INITIAL_STORIES = [
-  { id: 1, title: "🔥 Сэты", imgUrl: P_MEAT, isActive: true },
-  { id: 2, title: "👨‍🍳 На гриле", imgUrl: P_CHICKEN, isActive: true },
-  { id: 3, title: "🥤 Новинки", imgUrl: P_DRINK, isActive: true }
+  { id: 1, title: "🔥 Сэты", imgUrl: P_MEAT, isActive: true, type: 'image', timestamp: Date.now() },
+  { id: 2, title: "👨‍🍳 На гриле", imgUrl: P_CHICKEN, isActive: true, type: 'image', timestamp: Date.now() },
+  { id: 3, title: "🥤 Новинки", imgUrl: P_DRINK, isActive: true, type: 'image', timestamp: Date.now() }
 ];
 
 export const INITIAL_TABLES = [
@@ -365,7 +365,7 @@ export const INITIAL_ROLES = {
   "005004006": { role: "cook", station: "cold", name: "Повар Холодный", password: "Холодный повар", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null },
   "005005007": { role: "cook", station: "bar", name: "Бармен", password: "БАРМЕН", onShift: true, schedule: "3/1", isSenior: false, sessionToken: null },
   "007008009": { role: "cook", station: "mangal", name: "Шашлычник", password: "МАНГАЛ", onShift: true, schedule: "5/2", isSenior: false, sessionToken: null },
-  "77772222222": { role: "waiter", name: "Официант Али", password: "123", schedule: "2/2", onShift: true, kaspi: "77072223344", isSenior: true, sessionToken: null },
+  "77772222222": { role: "waiter", name: "Официант Али (Старший)", password: "123", schedule: "2/2", onShift: true, kaspi: "77072223344", isSenior: true, sessionToken: null },
   "009009009": { role: "cashier", name: "Кассир Мадина", password: "КАССА", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null }
 };
 

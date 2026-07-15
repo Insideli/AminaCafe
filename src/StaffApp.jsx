@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, useLocalStorage } from './data.js';
 
-export default function StaffApp({ currentUser, logout, lang, setLang }) {
+export default function StaffApp({ currentUser, logout, lang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
-  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
-  
-  // ВЕРНУЛИ БАЗЫ (Они нужны Директору для отзывов и имен гостей в брони):
-  const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); 
+  const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [reviews] = useLocalStorage('amina_reviews_v11', []);
+  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
@@ -725,7 +723,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                                <button onClick={() => changeOrderStatus(o.id, 'new', 'kaspi')} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                                <button onClick={() => {
                                  changeOrderStatus(o.id, 'rejected');
-                                 // Если отклонили задаток - снимаем бронь
                                  if (o.tableName.includes("Задаток")) {
                                     setTables(prev => prev.map(t => t.id === o.tableId ? {...t, status: 'free', bookedBy: null, bookedTime: null} : t));
                                  }

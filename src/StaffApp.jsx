@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, useLocalStorage } from './data.js';
 
-export default function StaffApp({ currentUser, logout, lang }) {
+export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
-  const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); // Вычищено
-  const [reviews] = useLocalStorage('amina_reviews_v11', []); // Вычищено
-  const [chats, setChats] = useLocalStorage('amina_chats_v11', []); 
-  // Вычистили analytics, так как он тут не нужен!
+  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
+  
+  // ВЕРНУЛИ БАЗЫ (Они нужны Директору для отзывов и имен гостей в брони):
+  const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); 
+  const [reviews] = useLocalStorage('amina_reviews_v11', []);
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
@@ -143,7 +144,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
           {chatUsers.length === 0 ? <p style={{color: '#6b7280', textAlign: 'center', marginTop: '30px'}}>Сообщений пока нет.</p> :
             chatUsers.map(phone => {
                const lastMsg = (chats || []).filter(c => c.from === phone || c.to === phone).pop();
-               const guestName = customers[phone]?.name || roles[phone]?.name || phone;
+               const guestName = (customers && customers[phone]?.name) || roles[phone]?.name || phone;
                const unreadCount = (chats || []).filter(c => c.from === phone && !c.isRead).length;
                return (
                  <div key={phone} onClick={() => {
@@ -166,7 +167,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
       );
     } else {
        const guestMsgs = (chats || []).filter(c => c.from === activeChatPhone || c.to === activeChatPhone);
-       const guestName = customers[activeChatPhone]?.name || activeChatPhone;
+       const guestName = (customers && customers[activeChatPhone]?.name) || activeChatPhone;
        return (
          <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxWidth: '800px', margin: '0 auto', background: '#fff', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
            <div style={{ padding: '15px', background: '#111827', color: '#fff', display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -408,6 +409,8 @@ export default function StaffApp({ currentUser, logout, lang }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Kaspi</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{kaspiRevenue} ₸</p></div>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Наличные</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cashRevenue} ₸</p></div>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Карта</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cardRevenue} ₸</p></div>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Apple Pay</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{appleRevenue} ₸</p></div>
               </div>
 
               <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 История закрытых заказов (Смена {reportDate}):</h3>
@@ -423,7 +426,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                      </div>
                      <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'}</span>
+                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
                         <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
                         <span>{o.date}</span>
                      </div>
@@ -520,7 +523,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
 
           {/* ПЕРСОНАЛ С ФИЛЬТРОМ */}
           {adminTab === 'staff' && (
-            <div style={{ padding: '20px', maxWidth: '700px', margin: '0 auto' }}>
+            <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
               
               <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', marginBottom: '20px', paddingBottom: '5px' }}>
                 {STAFF_FILTERS.map(f => (

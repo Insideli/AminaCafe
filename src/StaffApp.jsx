@@ -109,7 +109,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, total: total, remaining: total, tips: 0, isPreOrder: false, bookedTime: null, orderType: 'in_hall', date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: 'cash' }; 
     setOrders(prev => [newOrder, ...(prev || [])]); 
-    setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy || 'Гость', servedBy: t.servedBy || currentUser.phone, isCalling: false } : t));
+    setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy || 'Гость', servedBy: t.servedBy || currentUser.phone, isCalling: false, calledWaiter: null } : t));
     setShowPosModal(false); setPosCart({}); alert('Заказ отправлен на принтер кухни!');
   };
 
@@ -263,8 +263,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     <h3 style={{ color: '#991b1b', margin: '0 0 10px 0' }}>🏃 Гость подошел к кассе ({table.name})</h3>
                     <p style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#111827', fontWeight: 'bold' }}>К оплате: {orderForTable?.total || '?'} ₸</p>
                     <div style={{display: 'flex', gap: '10px'}}>
-                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); }} style={{ flex: 1, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
-                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'cash'); }} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
+                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); }} style={{ flex: 1, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
+                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'cash'); }} style={{ flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
                     </div>
                  </div>
                )
@@ -427,7 +427,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {(tables || []).filter(t => t.isCallingForBill && (t.servedBy === currentUser.phone || currentUser.isSenior)).map(table => {
              const ro = cashPending.find(o => o.tableId === table.id);
-             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null } : t)); if(ro) changeOrderStatus(ro.id, 'delivered'); }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
+             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) changeOrderStatus(ro.id, 'delivered'); }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
           })}
 
           {pickups.length > 0 && (
@@ -452,15 +452,35 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                   {groupTables.map(t => {
                     const isMyTable = t.servedBy === currentUser.phone || t.status === 'free';
                     const canManage = currentUser.isSenior || isMyTable;
+                    
+                    // ЛОГИКА ОТОБРАЖЕНИЯ ВЫЗОВОВ ОТ ГОСТЕЙ
+                    const isCallingMe = t.isCalling && t.calledWaiter === currentUser.phone;
+                    const isCallingSomeoneElse = t.isCalling && t.calledWaiter && t.calledWaiter !== currentUser.phone;
+                    const isGeneralCall = t.isCalling && !t.calledWaiter;
+
                     return (
-                      <div key={t.id} style={{ padding: '15px', borderRadius: '12px', backgroundColor: t.isCalling ? '#fef3c7' : '#fff', border: '1px solid #cbd5e1', textAlign: 'center', opacity: canManage ? 1 : 0.6 }}>
+                      <div key={t.id} style={{ padding: '15px', borderRadius: '12px', backgroundColor: isCallingMe || isGeneralCall ? '#fef3c7' : '#fff', border: isCallingMe || isGeneralCall ? '2px solid #f59e0b' : '1px solid #cbd5e1', textAlign: 'center', opacity: canManage ? 1 : 0.6 }}>
                         <p style={{ margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#111827' }}>{t.name}</p>
                         <span style={{ fontSize: '12px', color: '#6b7280' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
                         {t.status !== 'free' && t.servedBy && <p style={{fontSize: '11px', color: '#f59e0b', margin: '4px 0 0 0', fontWeight: 'bold'}}>{roles[t.servedBy]?.name || 'Официант'}</p>}
                         
+                        {/* ПОДТВЕРЖДЕНИЕ ВЫЗОВА */}
+                        {(isCallingMe || isGeneralCall) && (
+                          <div style={{background: '#f59e0b', color: '#fff', padding: '8px', borderRadius: '8px', marginTop: '10px', fontSize: '12px', fontWeight: 'bold'}}>
+                            🛎 Вас вызывают!
+                            <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, isCalling: false, calledWaiter: null } : tab))} style={{marginTop: '5px', padding: '5px', width: '100%', background: '#fff', color: '#f59e0b', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подошел</button>
+                          </div>
+                        )}
+
+                        {isCallingSomeoneElse && (
+                          <div style={{background: '#f3f4f6', color: '#4b5563', padding: '6px', borderRadius: '6px', marginTop: '10px', fontSize: '11px', fontWeight: 'bold'}}>
+                            Вызывает: {roles[t.calledWaiter]?.name || 'Официанта'}
+                          </div>
+                        )}
+                        
                         <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
                           <button disabled={!canManage} onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ flex: 1, padding: '8px', background: canManage ? '#111827' : '#9ca3af', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: canManage ? 'pointer' : 'not-allowed' }}>+ Чек</button>
-                          {t.status !== 'free' && canManage && <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false } : tab))} style={{ padding: '8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>X</button>}
+                          {t.status !== 'free' && canManage && <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ padding: '8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>X</button>}
                         </div>
                       </div>
                     )
@@ -593,13 +613,13 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                             
                             {t.bookedBy && (
                                <div style={{marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px dashed #10b981'}}>
-                                 <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#065f46', fontWeight: 'bold'}}>📅 Бронь: {t.bookedTime}</p>
+                                 <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#065f46', fontWeight: 'bold'}}>📅 Бронь: {t.bookedTime || 'Сейчас'}</p>
                                  <p style={{margin: 0, fontSize: '12px', color: '#111827'}}>{bookingCust?.name || 'Гость'}<br/>{t.bookedBy}</p>
                                </div>
                             )}
 
                             {t.status !== 'free' && (
-                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Освободить стол</button>
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Освободить стол</button>
                             )}
                          </div>
                        )
@@ -745,4 +765,4 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   }
 
   return null;
-                                       }
+}

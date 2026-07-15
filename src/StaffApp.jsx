@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, useLocalStorage } from './data.js';
 
-export default function StaffApp({ currentUser, logout, lang, setLang }) {
+export default function StaffApp({ currentUser, logout, lang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []);
-  const [chats, setChats] = useLocalStorage('amina_chats_v11', []); // БАЗА ЧАТОВ
-  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v11', { qr: 0, link: 0 });
+  const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
+  const [reviews] = useLocalStorage('amina_reviews_v11', []);
+  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
   const [selectedTableGroup, setSelectedTableGroup] = useState('all');
-  const [staffFilter, setStaffFilter] = useState('all'); // ФИЛЬТР ПЕРСОНАЛА
+  const [staffFilter, setStaffFilter] = useState('all');
   
   // Чаты:
   const [activeChatPhone, setActiveChatPhone] = useState(null);
@@ -36,13 +35,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     { id: 'admin', name: 'Админы' }
   ];
 
-  // ВЕРНУЛ ПОТЕРЯННЫЕ ПЕРЕМЕННЫЕ (Из-за которых падал Vercel)
-  const displayedReviews = reviewFilter === 'all' ? (reviews || []) : (reviews || []).filter(r => r.rating === parseInt(reviewFilter));
+  const displayedReviews = reviewFilter === 'all' ? (reviews || []) : (reviews || []).filter(r => r.rating === parseInt(reviewFilter, 10));
 
   const renderTextWithLinks = (text) => {
     if (!text) return null;
     const parts = text.split(/(https?:\/\/[^\s]+)/g);
-    return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
+    return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
   };
   
   // УМНАЯ КАССА (Смены)
@@ -60,29 +58,29 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   // === АВТО-СНЯТИЕ БРОНИ (ЧЕРЕЗ 30 МИНУТ) ===
   useEffect(() => {
     const interval = setInterval(() => {
-      const currentTime = new Date();
-      let tablesUpdated = false;
-      
-      const newTables = (tables || []).map(tab => {
-        if (tab.status === 'booked' && tab.bookedTime) {
-          const [bookH, bookM] = tab.bookedTime.split(':').map(Number);
-          const bookDate = new Date();
-          bookDate.setHours(bookH, bookM, 0, 0);
-          
-          const diffMins = (currentTime - bookDate) / (1000 * 60);
-          
-          if (diffMins > 30) {
-            tablesUpdated = true;
-            return { ...tab, status: 'free', bookedBy: null, bookedTime: null, servedBy: null };
+      setTables(prev => {
+        const currentTime = new Date();
+        let tablesUpdated = false;
+        const newTables = (prev || []).map(tab => {
+          if (tab.status === 'booked' && tab.bookedTime) {
+            const [bookH, bookM] = tab.bookedTime.split(':').map(Number);
+            const bookDate = new Date();
+            bookDate.setHours(bookH, bookM, 0, 0);
+            
+            const diffMins = (currentTime - bookDate) / (1000 * 60);
+            
+            if (diffMins > 30) {
+              tablesUpdated = true;
+              return { ...tab, status: 'free', bookedBy: null, bookedTime: null, servedBy: null };
+            }
           }
-        }
-        return tab;
+          return tab;
+        });
+        return tablesUpdated ? newTables : prev;
       });
-
-      if (tablesUpdated) setTables(newTables);
     }, 60000); 
     return () => clearInterval(interval);
-  }, [tables, setTables]);
+  }, [setTables]);
 
   // СИРЕНА ДЛЯ ПЕРСОНАЛА
   const callingTables = (tables || []).filter(tab => tab.isCalling || tab.isCallingForBill);
@@ -300,8 +298,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
-    console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: table?.name, items: text, total });
-
     const newOrder = { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, 
       tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, 
@@ -339,17 +335,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   };
 
   // --- ЛОГИКА КАССИРА ---
-  const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }));
-  const removeFromCashierCart = (id) => { setCashierCart(prev => { const updated = { ...prev }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; }); };
-  
   const submitCashierOrder = (payMethod) => {
     const cartArray = Object.values(cashierCart || {}); 
     if (cartArray.length === 0) return alert('Выберите блюда!');
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
-    console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: cashierOrderType, items: text, total });
-
     const newOrder = { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'cashier-' + currentUser.phone, tableId: 'cashier', 
       tableName: cashierOrderType === 'takeaway' ? 'Навынос (Касса)' : 'Доставка (Касса)', 
@@ -409,6 +400,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Kaspi</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{kaspiRevenue} ₸</p></div>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Наличные</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cashRevenue} ₸</p></div>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Карта</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cardRevenue} ₸</p></div>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Apple Pay</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{appleRevenue} ₸</p></div>
               </div>
 
               <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 История закрытых заказов (Смена {reportDate}):</h3>
@@ -424,7 +417,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                      </div>
                      <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'}</span>
+                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
                         <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
                         <span>{o.date}</span>
                      </div>
@@ -496,7 +489,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               <h3 style={{color: '#111827', marginBottom: '15px'}}>Управление меню:</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {(menu || []).map(item => (
-                  <div key={item.id} style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
+                  <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
                     <div style={{fontSize: '25px', display: 'flex', justifyContent: 'center'}}>
                       {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}
                     </div>
@@ -559,32 +552,30 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                 </div>
               )}
 
-              {staffFilter === 'all' && (
-                <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
-                  <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Новый сотрудник:</h4>
-                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
-                     <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                     <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                     <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                  </div>
-                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
-                    <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select>
-                    {newWaiter.role === 'cook' && (
-                       <select value={newWaiter.station} onChange={e => setNewWaiter({...newWaiter, station: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
-                         <option value="hot">Горячий цех</option><option value="cold">Холодный цех</option><option value="bar">Бар</option><option value="mangal">Мангал</option>
-                       </select>
-                    )}
-                    <input type="text" placeholder="График (напр. 2/2)" value={newWaiter.schedule} onChange={e => setNewWaiter({...newWaiter, schedule: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                  </div>
-                  {newWaiter.role === 'waiter' && (
-                    <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
-                      <input type="checkbox" checked={newWaiter.isSenior} onChange={e => setNewWaiter({...newWaiter, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
-                      👑 Назначить Старшим
-                    </label>
-                  )}
-                  <button onClick={handleAddWaiter} style={{ width: '100%', padding: '14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Добавить сотрудника</button>
+              <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
+                <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Новый сотрудник:</h4>
+                <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                   <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                   <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                   <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
                 </div>
-              )}
+                <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                  <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select>
+                  {newWaiter.role === 'cook' && (
+                     <select value={newWaiter.station} onChange={e => setNewWaiter({...newWaiter, station: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+                       <option value="hot">Горячий цех</option><option value="cold">Холодный цех</option><option value="bar">Бар</option><option value="mangal">Мангал</option>
+                     </select>
+                  )}
+                  <input type="text" placeholder="График (напр. 2/2)" value={newWaiter.schedule} onChange={e => setNewWaiter({...newWaiter, schedule: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                </div>
+                {newWaiter.role === 'waiter' && (
+                  <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
+                    <input type="checkbox" checked={newWaiter.isSenior} onChange={e => setNewWaiter({...newWaiter, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
+                    👑 Назначить Старшим
+                  </label>
+                )}
+                <button onClick={handleAddWaiter} style={{ width: '100%', padding: '14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Добавить сотрудника</button>
+              </div>
 
               {Object.entries(roles || {})
                 .filter(([phone, data]) => staffFilter === 'all' ? true : data.role === staffFilter)
@@ -607,7 +598,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* ЗАЛЫ */}
           {adminTab === 'tables' && (
-            <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
               <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>🗺 Контроль залов</h2>
               <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #d1d5db' }}>
                 {['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'].map(group => (<button key={group} onClick={() => setSelectedTableGroup(group)} style={{ padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: selectedTableGroup === group ? '#111827' : '#fff', color: selectedTableGroup === group ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{group === 'all' ? 'Все залы' : group}</button>))}
@@ -650,7 +641,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* ОТЗЫВЫ */}
           {adminTab === 'reviews' && (
-            <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '700px', margin: '0 auto' }}>
                <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
                  {['all', '5', '4', '3', '2', '1'].map(star => (
                    <button key={star} onClick={() => setReviewFilter(star)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #d1d5db', background: reviewFilter === star ? '#111827' : '#fff', color: reviewFilter === star ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>
@@ -806,8 +797,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         
                         <div style={{display: 'flex', gap: '5px'}}>
                           <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
-                             {isReallyActive ? 'Скрыть' : 'Опубликовать заново'}
+                             {isReallyActive ? 'Скрыть у гостей' : 'Опубликовать заново (24ч)'}
                           </button>
+                          <button onClick={() => setStoriesDb(prev => prev.filter(st => st.id !== s.id))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>Удалить</button>
                         </div>
                       </div>
                     </div>
@@ -865,7 +857,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           ЭКРАН 3: ОФИЦИАНТ (СТАБИЛИЗИРОВАННЫЙ ЭКРАН)
       ========================================== */}
       {currentUser.role === 'waiter' && (
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', overflowX: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflowX: 'hidden' }}>
           {showPosModal && renderWaiterPosModal()}
           {notifyBanner}
           <header style={{ backgroundColor: '#10b981', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -907,7 +899,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА (КРАСИВО ПОВЕРХ) */}
           {showWaiterMenu && (
-             <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', width: '100%' }}>
+             <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', width: '100vw' }}>
                <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                  <h2 style={{margin: 0, fontSize: '18px'}}>📖 Меню заведения</h2><button onClick={() => setShowWaiterMenu(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
                </div>

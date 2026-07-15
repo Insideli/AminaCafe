@@ -10,7 +10,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []);
   const [chats, setChats] = useLocalStorage('amina_chats_v11', []); // БАЗА ЧАТОВ
-  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v11', { qr: 0, link: 0 });
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
@@ -26,7 +25,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     logout: lang === 'ru' ? 'Выйти' : 'Шығу'
   };
 
-  // ФИЛЬТРЫ ДЛЯ ПЕРСОНАЛА (Именно из-за отсутствия этой переменной Vercel выдавал ошибку!)
+  // ФИЛЬТРЫ ДЛЯ ПЕРСОНАЛА
   const STAFF_FILTERS = [
     { id: 'all', name: 'Все' }, 
     { id: 'waiter', name: 'Официанты' }, 
@@ -340,6 +339,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
+    // ЗАГЛУШКА ДЛЯ PALOMA365
     console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: cashierOrderType, items: text, total });
 
     const newOrder = { 
@@ -352,6 +352,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     };
     setOrders(prev => [newOrder, ...(prev || [])]); setCashierCart({}); alert('Заказ оплачен и отправлен на принтер кухни!');
   };
+
+  // Вспомогательная функция для ссылок (Именно её не хватало Vercel'у!)
+  const renderTextWithLinks = (text) => {
+    if (!text) return null; const parts = text.split(/(https?:\/\/[^\s]+)/g);
+    return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
+  };
+
+  const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
+  const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px', overflowX: 'hidden', width: '100vw', maxWidth: '100vw' }}>
@@ -377,6 +386,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#f3f4f6', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
             <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#f3f4f6', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
             <button onClick={() => setAdminTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'tables' ? '#ec4899' : '#f3f4f6', color: adminTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
+            <button onClick={() => setAdminTab('reviews')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'reviews' ? '#14b8a6' : '#f3f4f6', color: adminTab === 'reviews' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>⭐️ Отзывы</button>
           </div>
           
           {/* ВЫРУЧКА */}
@@ -412,7 +422,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                      </div>
                      <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'}</span>
+                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
                         <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
                         <span>{o.date}</span>
                      </div>
@@ -763,7 +773,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         
                         <div style={{display: 'flex', gap: '5px'}}>
                           <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
-                             {isReallyActive ? 'Скрыть у гостей' : 'Опубликовать заново'}
+                             {isReallyActive ? 'Скрыть' : 'Опубликовать заново'}
                           </button>
                         </div>
                       </div>
@@ -966,6 +976,19 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         </>
       )}
 
+      {/* Функция для рендера ссылок у повара */}
+      {(() => {
+        // Мы уже объявили renderTextWithLinks выше, но если нужно использовать её в JSX повара напрямую, она должна быть доступна в области видимости.
+        // Я вынес её в глобальную область компонента, поэтому она доступна для всех ролей.
+      })()}
+
     </div>
   );
 }
+
+// Вспомогательная функция для рендера ссылок
+const renderTextWithLinks = (text) => {
+  if (!text) return null;
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
+};

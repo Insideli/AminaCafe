@@ -5,7 +5,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
-  const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []); // Сторисы загружаются из базы
+  const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []); 
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []); 
@@ -18,8 +18,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [cart, setCart] = useState({});
   const [isPreOrderFlow, setIsPreOrderFlow] = useState(false); 
   const [preOrderTableId, setPreOrderTableId] = useState(null);
+  
+  // Бронь и задаток
   const [showTimeModal, setShowTimeModal] = useState(false); 
   const [bookingTime, setBookingTime] = useState('19:00');
+  const [isBookingDeposit, setIsBookingDeposit] = useState(false); // Флаг для оплаты задатка
   
   const [paymentStatus, setPaymentStatus] = useState('idle'); 
   const [pendingOrderId, setPendingOrderId] = useState(null); 
@@ -51,8 +54,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     orderHistory: lang === 'ru' ? 'История заказов' : 'Тапсырыстар тарихы',
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.',
     payMethod: lang === 'ru' ? 'Метод оплаты' : 'Төлем әдісі',
-    payApple: 'Apple Pay / Google Pay',
-    payCard: lang === 'ru' ? 'Привязать карту' : 'Картаны тіркеу',
     payKaspi: lang === 'ru' ? 'Kaspi Перевод' : 'Kaspi Аударым',
     payCash: lang === 'ru' ? 'Наличными' : 'Қолма-қол',
     addressPrompt: lang === 'ru' ? 'Куда доставить?' : 'Қайда жеткізу керек?',
@@ -109,18 +110,25 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
   }, []);
 
-  // Синхронизация статусов оплат (Kaspi / Наличные)
+  // Синхронизация статусов оплат
   useEffect(() => {
     if (pendingOrderId && (paymentStatus === 'processing' || paymentStatus === 'waiter_pending')) {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (checkOrder) {
-        if (checkOrder.status === 'new') { setPaymentStatus(checkOrder.payMethod === 'cash' ? 'cash_success' : 'success'); setPendingOrderId(null); } 
-        else if (checkOrder.status === 'rejected') { setPaymentStatus('rejected'); setPendingOrderId(null); }
+        if (checkOrder.status === 'new') { 
+          setPaymentStatus(checkOrder.payMethod === 'cash' ? 'cash_success' : 'success'); 
+          setPendingOrderId(null); 
+          setIsBookingDeposit(false);
+        } 
+        else if (checkOrder.status === 'rejected') { 
+          setPaymentStatus('rejected'); 
+          setPendingOrderId(null); 
+          setIsBookingDeposit(false);
+        }
       }
     }
   }, [orders, pendingOrderId, paymentStatus]);
 
-  // Система отзывов (через 30 секунд после закрытия заказа)
   useEffect(() => {
     const interval = setInterval(() => {
        if (currentUser?.isAnonymous || reviewOrder) return;
@@ -131,9 +139,25 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   }, [orders, currentUser, reviewOrder]);
 
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
-  const initiateBooking = (id) => { setPreOrderTableId(id); setShowTimeModal(true); };
-  const confirmBookingTime = () => { if (!bookingTime) return alert(lang === 'ru' ? "Выберите время!" : "Уақытты таңдаңыз!"); setIsPreOrderFlow(true); setOrderType('in_hall'); setShowTimeModal(false); setActiveGuestTab('menu'); alert(lang === 'ru' ? `Время: ${bookingTime} установлено!` : `Уақыт: ${bookingTime} орнатылды!`); };
-  const bookTableNow = (id) => { setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false } : t)); setOrderType('in_hall'); };
+  
+  // НАЧАЛО БРОНИРОВАНИЯ
+  const initiateBooking = (id) => { 
+    setPreOrderTableId(id); 
+    setShowTimeModal(true); 
+  };
+  
+  // ПОДТВЕРЖДЕНИЕ ВРЕМЕНИ БРОНИ И ПЕРЕХОД К ОПЛАТЕ ЗАДАТКА
+  const confirmBookingTime = () => { 
+    if (!bookingTime) return alert(lang === 'ru' ? "Выберите время!" : "Уақытты таңдаңыз!"); 
+    setIsBookingDeposit(true);
+    setPaymentStatus('kaspi_card'); // Сразу кидаем на оплату перевода
+    setShowTimeModal(false); 
+  };
+
+  const bookTableNow = (id) => { 
+    setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false } : t)); 
+    setOrderType('in_hall'); 
+  };
   
   const callWaiterForAssistance = (id) => {
     setTables(prev => (prev || []).map(t => t.id === id ? { ...t, isCalling: true } : t));
@@ -150,21 +174,32 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const cartItemsArray = Object.values(cart || {});
   const totalItemsCount = cartItemsArray.reduce((sum, item) => sum + item.quantity, 0);
   const baseSubtotal = cartItemsArray.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalAmount = isPreOrderFlow ? (baseSubtotal === 0 ? 1000 : Math.round(baseSubtotal / 2)) : baseSubtotal;
+  
+  // Если мы оплачиваем задаток за бронь, сумма жестко 1000
+  const totalAmount = isBookingDeposit ? 1000 : baseSubtotal;
   const availableBonuses = customers[currentUser?.phone]?.bonuses || 0;
 
   const createOrderObject = (statusToSet, assignedWaiterPhone = null, assignedWaiterName = null, payMethod = 'kaspi') => {
-    const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name[lang] || i.name.ru || i.name} (x${i.quantity})`).join(', ') : (lang === 'ru' ? "Бронь места" : "Орынды брондау");
+    // Если это задаток, создаем специальный чек
+    if (isBookingDeposit) {
+      return { 
+        id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: currentUser.phone, tableId: preOrderTableId, tableName: "Бронь стола (Задаток)", cartItems: [], itemsText: lang === 'ru' ? "Задаток за бронь" : "Брондау алдын ала төлемі", total: 1000, tips: 0, isPreOrder: false, bookedTime: bookingTime, orderType: 'in_hall', deliveryAddress: '', 
+        date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
+        fullDate: new Date().toLocaleDateString('ru-RU'), 
+        status: statusToSet, waiterPhone: null, waiterName: null, isReviewed: false, reviewUnlockTime: null, payMethod: 'kaspi' 
+      };
+    }
+
+    const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name[lang] || i.name.ru || i.name} (x${i.quantity})`).join(', ') : "";
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
     
-    // ЛОГИКА СМЕНЫ (УМНАЯ КАССА) - Смена до 6 утра считается "вчерашней"
     const now = new Date();
     const shiftDate = new Date(now);
     if (now.getHours() < 6) shiftDate.setDate(shiftDate.getDate() - 1);
     const shiftDateStr = shiftDate.toLocaleDateString('ru-RU');
 
     return { 
-      id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: currentUser.phone, tableId: activeTable?.id || orderType, tableName: activeTableName, cartItems: cartItemsArray, itemsText: text, total: totalAmount, tips: 0, isPreOrder: isPreOrderFlow, bookedTime: isPreOrderFlow ? bookingTime : null, orderType, deliveryAddress: fullAddress, 
+      id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: currentUser.phone, tableId: activeTable?.id || orderType, tableName: activeTableName, cartItems: cartItemsArray, itemsText: text, total: totalAmount, tips: 0, isPreOrder: false, bookedTime: null, orderType, deliveryAddress: fullAddress, 
       date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
       fullDate: shiftDateStr, 
       status: statusToSet, waiterPhone: assignedWaiterPhone, waiterName: assignedWaiterName, isReviewed: false, reviewUnlockTime: null, payMethod 
@@ -180,22 +215,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const confirmTransfer = () => {
     const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
     setOrders(prev => [newOrder, ...(prev || [])]);
-    if (isPreOrderFlow && preOrderTableId) setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
+    
+    // Бронируем стол, если это задаток
+    if (isBookingDeposit && preOrderTableId) {
+       setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
+    }
+    
     setPendingOrderId(newOrder.id);
     setPaymentStatus('processing'); 
-  };
-
-  // ИМИТАЦИЯ APPLE PAY И КАРТЫ (Загрузка 2-3 секунды перед успехом)
-  const confirmDirectPayment = (method) => {
-    setPaymentStatus('processing'); // Показываем крутилку
-    setTimeout(() => {
-      const newOrder = createOrderObject('new', null, null, method);
-      setOrders(prev => [newOrder, ...(prev || [])]);
-      if (isPreOrderFlow && preOrderTableId) {
-        setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
-      }
-      setPaymentStatus('success'); // Оплата прошла успешно
-    }, 2500); // Имитация задержки эквайринга
   };
 
   const handleCashSelection = () => {
@@ -208,7 +235,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const confirmCashWithWaiter = (waiterPhone, waiterName) => {
     const newOrder = createOrderObject('waiter_pending', waiterPhone, waiterName, 'cash');
     setOrders(prev => [newOrder, ...(prev || [])]);
-    if (isPreOrderFlow && preOrderTableId) setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
     setPendingOrderId(newOrder.id);
     setPaymentStatus('waiter_pending');
   };
@@ -220,7 +246,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     confirmCashWithWaiter(randomW[0], randomW[1].name);
   };
 
-  const handleFinishAndClear = () => { setCart({}); setIsPreOrderFlow(false); setPreOrderTableId(null); setPaymentStatus('idle'); setPendingOrderId(null); setActiveGuestTab('profile'); };
+  const handleFinishAndClear = () => { setCart({}); setIsPreOrderFlow(false); setPreOrderTableId(null); setPaymentStatus('idle'); setPendingOrderId(null); setIsBookingDeposit(false); setActiveGuestTab('profile'); };
   const copyToClipboard = (text) => { navigator.clipboard.writeText(text); alert(lang === 'ru' ? 'Реквизиты скопированы!' : 'Деректемелер көшірілді!'); };
 
   const getWaiterRating = (phone) => {
@@ -341,6 +367,25 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         @media (min-width: 1200px) { .tables-grid { grid-template-columns: repeat(5, 1fr); } }
       `}}/>
 
+      {/* --- МОДАЛКА ВРЕМЕНИ БРОНИ + ЗАДАТОК --- */}
+      {showTimeModal && (
+        <div className="payment-overlay">
+           <div className="payment-modal" style={{textAlign: 'center'}}>
+              <h2 style={{margin: '0 0 10px 0', color: '#111827'}}>{lang === 'ru' ? 'Время бронирования' : 'Брондау уақыты'}</h2>
+              <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px', lineHeight: '1.4'}}>
+                 {lang === 'ru' ? 'Бронь требует задаток 1000 ₸. Если вы опоздаете более чем на 30 минут, бронь снимается, а задаток не возвращается.' : 'Брондау үшін 1000 ₸ алдын ала төлем қажет. Егер сіз 30 минуттан артық кешіксеңіз, бронь жойылады, ал төлем қайтарылмайды.'}
+              </p>
+              
+              <input type="time" value={bookingTime} onChange={e => setBookingTime(e.target.value)} style={{fontSize: '28px', padding: '15px', borderRadius: '14px', border: '2px solid #e5e7eb', marginBottom: '25px', width: '100%', textAlign: 'center', background: '#f9fafb', fontWeight: 'bold', color: '#111827'}} />
+              
+              <div style={{display: 'flex', gap: '10px'}}>
+                 <button onClick={() => setShowTimeModal(false)} style={{flex: 1, padding: '16px', borderRadius: '14px', background: '#f3f4f6', color: '#111827', fontWeight: 'bold', border: 'none', fontSize: '15px', cursor: 'pointer'}}>Отмена</button>
+                 <button onClick={confirmBookingTime} style={{flex: 1, padding: '16px', borderRadius: '14px', background: '#10b981', color: '#fff', fontWeight: 'bold', border: 'none', fontSize: '15px', cursor: 'pointer'}}>К оплате 1000 ₸</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* --- ПОЛНОЭКРАННАЯ СТОРИС С ПОДДЕРЖКОЙ ВИДЕО --- */}
       {activeStory && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }} onClick={() => setActiveStory(null)}>
@@ -405,7 +450,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ОПЛАТЫ --- */}
+      {/* --- МОДАЛЬНОЕ ОКНО ОПЛАТЫ (Только реальные методы) --- */}
       {paymentStatus !== 'idle' && (
         <div className="payment-overlay">
           <div className="payment-modal">
@@ -418,20 +463,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <button onClick={() => setPaymentStatus('idle')} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563'}}>✕</button>
                 </div>
 
-                <div className="pay-method-btn" onClick={() => confirmDirectPayment('apple_pay')} style={{background: '#111827', color: '#fff', borderColor: '#111827'}}>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                    <div style={{fontSize: '24px'}}></div>
-                    <div><p style={{margin: '0', fontWeight: '900', fontSize: '16px', color: '#fff'}}>{t.payApple}</p></div>
-                  </div>
-                </div>
-                
-                <div className="pay-method-btn" onClick={() => confirmDirectPayment('card')}>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                    <div style={{background: '#eff6ff', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>💳</div>
-                    <div><p style={{margin: '0', fontWeight: '900', fontSize: '16px', color: '#111827'}}>{t.payCard}</p></div>
-                  </div>
-                </div>
-
                 <div className="pay-method-btn" onClick={() => setPaymentStatus('kaspi_card')}>
                   <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
                     <div style={{background: '#fee2e2', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>📱</div>
@@ -439,12 +470,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   </div>
                 </div>
 
-                <div className="pay-method-btn" onClick={handleCashSelection}>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                    <div style={{background: '#ecfdf5', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>💵</div>
-                    <div><p style={{margin: '0', fontWeight: '900', fontSize: '16px', color: '#111827'}}>{t.payCash}</p></div>
+                {!isBookingDeposit && ( // Задаток наличными не берут, только заказы в зале
+                  <div className="pay-method-btn" onClick={handleCashSelection}>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                      <div style={{background: '#ecfdf5', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>💵</div>
+                      <div><p style={{margin: '0', fontWeight: '900', fontSize: '16px', color: '#111827'}}>{t.payCash}</p></div>
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
 
@@ -479,7 +512,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
             {paymentStatus === 'kaspi_card' && (
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
-                  <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
+                  <button onClick={() => setPaymentStatus(isBookingDeposit ? 'idle' : 'select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
                   <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>{t.payKaspi}</h2>
                 </div>
                 
@@ -502,7 +535,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЭКРАН 3: ЗАГРУЗКА (Apple Pay / Карта) */}
+            {/* ЭКРАН 3: ЗАГРУЗКА */}
             {paymentStatus === 'processing' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
@@ -527,7 +560,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ЭКРАН 5/6: УСПЕХ */}
+            {/* ЭКРАН 5: УСПЕХ */}
             {(paymentStatus === 'success' || paymentStatus === 'cash_success') && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', color: '#10b981', marginBottom: '15px'}}>✅</div>
@@ -587,20 +620,22 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <button className="hamburger-menu-trigger" onClick={() => setIsMenuOpen(true)}><span>☰</span> {t.cats}</button>
               
               {/* СТОРИСЫ (ОТФИЛЬТРОВАННЫЕ ДО 24 ЧАСОВ) */}
-              <div className="stories-row">
-                {activeStories.map(story => (
-                  <div key={story.id} className="story-item" onClick={() => setActiveStory(story)}>
-                    <div className="story-circle">
-                      {story.type === 'video' ? (
-                        <video src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} muted />
-                      ) : (
-                        <img src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} alt=""/>
-                      )}
+              {activeStories.length > 0 && (
+                <div className="stories-row">
+                  {activeStories.map(story => (
+                    <div key={story.id} className="story-item" onClick={() => setActiveStory(story)}>
+                      <div className="story-circle">
+                        {story.type === 'video' ? (
+                          <video src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} muted />
+                        ) : (
+                          <img src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} alt=""/>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#111827' }}>{story.title[lang] || story.title.ru || story.title}</span>
                     </div>
-                    <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#111827' }}>{story.title[lang] || story.title.ru || story.title}</span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
               
               <div className="food-list">
                 {displayedMenu.map(item => (
@@ -609,7 +644,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                     <div className="food-info">
                       <h3 className="food-name" style={{color: '#111827'}}>{item.name[lang] || item.name.ru || item.name}</h3>
                       <p className="food-ingr">{item.ingredients[lang] || item.ingredients.ru || item.ingredients}</p>
-                      {item.isStop ? <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '12px' }}>Стоп</span> : <span className="food-price">{item.price} ₸</span>}
+                      {item.isStop ? <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '12px' }}>Стоп: {item.stopReason}</span> : <span className="food-price">{item.price} ₸</span>}
                     </div>
                     {cart[item.id] ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', borderRadius: '12px', padding: '4px', flexShrink: 0 }}>
@@ -728,7 +763,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: o.status === 'rejected' ? '#dc2626' : o.status === 'transfer_pending' ? '#f59e0b' : '#10b981'}}>
                          {o.status === 'rejected' ? (lang === 'ru' ? 'Оплата отменена' : 'Төлемнен бас тартылды') : 
                           o.status === 'transfer_pending' ? (lang === 'ru' ? 'Ожидание проверки' : 'Тексеру күтілуде') : 
-                          (lang === 'ru' ? `Оплачено (${o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'apple_pay' ? 'Apple Pay' : o.payMethod === 'card' ? 'Карта' : 'Наличные'})` : `Төленді (${o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'apple_pay' ? 'Apple Pay' : o.payMethod === 'card' ? 'Карта' : 'Қолма-қол'})`)}
+                          (lang === 'ru' ? `Оплачено (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'})` : `Төленді (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Қолма-қол'})`)}
                        </p>
                        <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>{o.itemsText}</p>
                        <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>

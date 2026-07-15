@@ -51,7 +51,6 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const allDates = [...new Set((orders || []).map(o => o.fullDate))].sort().reverse();
   if (!allDates.includes(todayDateStr)) allDates.unshift(todayDateStr);
 
-  // === АВТО-СНЯТИЕ БРОНИ (ЧЕРЕЗ 30 МИНУТ) ===
   useEffect(() => {
     const interval = setInterval(() => {
       setTables(prev => {
@@ -286,8 +285,6 @@ export default function StaffApp({ currentUser, logout, lang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
-    console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: table?.name, items: text, total });
-
     const newOrder = { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, 
       tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, 
@@ -447,7 +444,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                       <div style={{flex: 1}}>
                         <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title.ru || s.title}</p>
                         <p style={{margin: '0 0 5px 0', fontSize: '11px', color: '#6b7280'}}>Загружено: {new Date(s.timestamp).toLocaleDateString('ru-RU')}</p>
-                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: '#ea580c'}}>👁 Просмотров: {s.viewedBy ? s.viewedBy.length : 0}</p>
+                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: '#ea580c'}}>👁 Просмотров: {(s.viewedBy || []).length}</p>
                         
                         <div style={{display: 'flex', gap: '5px'}}>
                           <button onClick={() => setStoriesDb(prev => (prev || []).map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
@@ -463,7 +460,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
             </div>
           )}
 
-          {/* МЕНЮ */}
+          {/* МЕНЮ С ФИКСИРОВАННОЙ СЕТКОЙ ДЛЯ СТАБИЛЬНОСТИ */}
           {adminTab === 'menu' && (
             <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>

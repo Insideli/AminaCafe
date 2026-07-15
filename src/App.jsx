@@ -101,7 +101,7 @@ function MainApp() {
       const staffMember = (roles || {})[tempPhone];
       if (!staffMember) return alert(lang === 'ru' ? "❌ Неверный логин сотрудника!" : "❌ Қызметкердің логині қате!");
       if (staffMember.password !== tempPassword) return alert(lang === 'ru' ? "❌ Неверный пароль!" : "❌ Құпия сөз қате!");
-      if (!staffMember.onShift && staffMember.role !== 'admin') return alert(lang === 'ru' ? "❌ Сегодня не ваша смена!" : "❌ Бүгін сіздің ауысымыңыз емес!");
+      if (!staffMember.onShift && staffMember.role !== 'admin' && staffMember.role !== 'developer') return alert(lang === 'ru' ? "❌ Сегодня не ваша смена!" : "❌ Бүгін сіздің ауысымыңыз емес!");
       
       const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
       const updatedRoles = { ...roles, [tempPhone]: { ...staffMember, sessionToken: newToken } };
@@ -130,11 +130,17 @@ function MainApp() {
     e.preventDefault(); 
     if (!tempName.trim()) return alert(lang === 'ru' ? "Введите имя!" : "Атыңызды енгізіңіз!");
 
-    const nameRegex = /^[А-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ\s]+$/i;
-    if (!nameRegex.test(tempName)) return alert(lang === 'ru' ? "❌ Имя должно содержать только русские или казахские буквы! Без цифр и символов." : "❌ Есімде тек орыс немесе қазақ әріптері болуы керек! Сандар мен белгілерсіз.");
+    // 1. Проверка на язык (только кириллица и казахские буквы)
+    const nameRegex = /^[А-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ\s\-]+$/i;
+    if (!nameRegex.test(tempName)) {
+      return alert(lang === 'ru' ? "❌ Имя должно содержать только русские или казахские буквы! Без цифр и спецсимволов." : "❌ Есімде тек орыс немесе қазақ әріптері болуы керек! Сандар мен белгілерсіз.");
+    }
 
-    const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim());
-    if (nameExists) return alert(lang === 'ru' ? "❌ Это имя уже занято. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
+    // 2. Проверка на уникальность (без учета регистра)
+    const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim() && c.phone !== tempPhone);
+    if (nameExists) {
+      return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
+    }
 
     setCustomers(prev => ({ ...(prev || {}), [tempPhone]: { phone: tempPhone, name: tempName.trim(), bonuses: 500, sessionToken: null } })); 
     setCurrentUser({ role: 'guest', phone: tempPhone, name: tempName.trim(), station: null, sessionToken: null }); 

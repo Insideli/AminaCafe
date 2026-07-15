@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
-  const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
-  const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
-  const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []); 
+  // ВНИМАНИЕ: Все базы переведены на v12 для сброса кэша
+  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
+  const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
+  const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
+  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
+  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
+  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []); 
   
   // ТЕХПОДДЕРЖКА
-  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v11', INITIAL_SUPPORT);
+  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
 
@@ -348,38 +349,36 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
          </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ --- */}
+      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ (ПОЛНОЭКРАННОЕ) --- */}
       {showSupportModal && (
-        <div className="payment-overlay" onClick={() => setShowSupportModal(false)}>
-          <div className="payment-modal" onClick={e => e.stopPropagation()} style={{ height: '80vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #e5e7eb', flexShrink: 0}}>
-              <div>
-                <h2 style={{margin: 0, color: '#111827', fontSize: '20px'}}>💬 Поддержка</h2>
-                <p style={{margin: '2px 0 0 0', fontSize: '12px', color: '#10b981', fontWeight: 'bold'}}>Онлайн. Отвечаем быстро!</p>
-              </div>
-              <button onClick={() => setShowSupportModal(false)} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold'}}>✕</button>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+          <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+            <div>
+              <h2 style={{margin: 0, fontSize: '20px'}}>💬 Поддержка</h2>
+              <p style={{margin: '2px 0 0 0', fontSize: '12px', color: '#10b981', fontWeight: 'bold'}}>Онлайн. Отвечаем быстро!</p>
             </div>
-            
-            <div style={{flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '5px', marginBottom: '15px'}}>
-               {supportChat.filter(m => m.phone === currentUser.phone).length === 0 && (
-                 <p style={{textAlign: 'center', color: '#6b7280', fontSize: '13px', marginTop: '20px'}}>Здесь вы можете сообщить о баге, глюке или оставить предложение. Напишите нам!</p>
-               )}
-               {supportChat.filter(m => m.phone === currentUser.phone).map(m => (
-                  <div key={m.id} style={{alignSelf: m.sender === 'guest' ? 'flex-end' : 'flex-start', background: m.sender === 'guest' ? '#111827' : '#f3f4f6', color: m.sender === 'guest' ? '#fff' : '#111827', padding: '12px', borderRadius: '14px', maxWidth: '85%'}}>
-                     <p style={{margin: 0, fontSize: '14px', lineHeight: '1.4'}}>{m.text}</p>
-                     <p style={{margin: '5px 0 0 0', fontSize: '10px', opacity: 0.6, textAlign: 'right'}}>{m.time}</p>
-                  </div>
-               ))}
-            </div>
-            
-            <div style={{display: 'flex', gap: '8px', flexShrink: 0}}>
-              <input type="text" value={supportText} onChange={e=>setSupportText(e.target.value)} placeholder="Сообщение разработчикам..." style={{flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box'}} />
-              <button onClick={() => {
-                 if(!supportText.trim()) return;
-                 setSupportChat(prev => [...(prev||[]), {id: Date.now(), phone: currentUser.phone, name: currentUser.name, sender: 'guest', text: supportText, time: new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}]);
-                 setSupportText('');
-              }} style={{background: '#3b82f6', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'}}>➤</button>
-            </div>
+            <button onClick={() => setShowSupportModal(false)} style={{background: '#374151', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>✕</button>
+          </div>
+          
+          <div style={{flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px'}}>
+             {supportChat.filter(m => m.phone === currentUser.phone).length === 0 && (
+               <p style={{textAlign: 'center', color: '#6b7280', fontSize: '13px', marginTop: '20px'}}>Здесь вы можете сообщить о баге, глюке или оставить предложение. Напишите нам!</p>
+             )}
+             {supportChat.filter(m => m.phone === currentUser.phone).map(m => (
+                <div key={m.id} style={{alignSelf: m.sender === 'guest' ? 'flex-end' : 'flex-start', background: m.sender === 'guest' ? '#111827' : '#fff', color: m.sender === 'guest' ? '#fff' : '#111827', border: m.sender === 'guest' ? 'none' : '1px solid #e5e7eb', padding: '12px', borderRadius: '16px', maxWidth: '85%', boxShadow: '0 2px 5px rgba(0,0,0,0.02)'}}>
+                   <p style={{margin: 0, fontSize: '15px', lineHeight: '1.4'}}>{m.text}</p>
+                   <p style={{margin: '5px 0 0 0', fontSize: '10px', opacity: 0.6, textAlign: 'right'}}>{m.time}</p>
+                </div>
+             ))}
+          </div>
+          
+          <div style={{padding: '15px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '10px', flexShrink: 0, paddingBottom: 'max(15px, env(safe-area-inset-bottom))'}}>
+            <input type="text" value={supportText} onChange={e=>setSupportText(e.target.value)} placeholder="Сообщение разработчикам..." style={{flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', fontSize: '15px', boxSizing: 'border-box', background: '#f9fafb', color: '#111827'}} />
+            <button onClick={() => {
+               if(!supportText.trim()) return;
+               setSupportChat(prev => [...(prev||[]), {id: Date.now(), phone: currentUser.phone, name: currentUser.name, sender: 'guest', text: supportText, time: new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}]);
+               setSupportText('');
+            }} style={{background: '#3b82f6', color: '#fff', border: 'none', width: '50px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px'}}>➤</button>
           </div>
         </div>
       )}
@@ -692,7 +691,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                         <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#111827', fontWeight: '800', lineHeight: '1.2' }}>{table.name}</h3>
                         <p style={{ fontSize: '11px', color: '#6b7280', margin: '0 0 10px 0' }}>Мест: {table.seats}</p>
                         
-                        {/* ЛОГИКА ОТОБРАЖЕНИЯ КНОПОК */}
+                        {/* ЛОГИКА ОТОБРАЖЕНИ КНОПОК */}
                         {table.bookedBy === currentUser?.phone && !currentUser.isAnonymous ? (
                           <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
                             <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>🔒 Ваш стол</span>

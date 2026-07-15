@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
-  const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
-  const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
-  const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []);
-  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v11', { qr: 0, link: 0 });
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
+  // ВНИМАНИЕ: Все базы переведены на v12 для сброса кэша
+  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
+  const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
+  const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
+  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
+  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []);
+  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
+  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
 
   // ТЕХПОДДЕРЖКА
-  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v11', INITIAL_SUPPORT);
+  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
   const [activeSupportPhone, setActiveSupportPhone] = useState(null);
   const [supportAdminText, setSupportAdminText] = useState('');
 
@@ -47,11 +48,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const sync = (e) => {
       try {
         if (!e.newValue) return; const parsed = JSON.parse(e.newValue);
-        if (e.key === 'amina_orders_v11') setOrders(parsed || []); if (e.key === 'amina_tables_v11') setTables(parsed || []);
-        if (e.key === 'amina_menu_v11') setMenu(parsed || []); if (e.key === 'amina_roles_v11') setRoles(parsed || {});
-        if (e.key === 'amina_reviews_v11') setReviews(parsed || []); if (e.key === 'amina_analytics_v11') setAnalytics(parsed || { qr:0, link:0 });
-        if (e.key === 'amina_customers_v11') setCustomers(parsed || {});
-        if (e.key === 'amina_support_v11') setSupportChat(parsed || []);
+        if (e.key === 'amina_orders_v12') setOrders(parsed || []); if (e.key === 'amina_tables_v12') setTables(parsed || []);
+        if (e.key === 'amina_menu_v12') setMenu(parsed || []); if (e.key === 'amina_roles_v12') setRoles(parsed || {});
+        if (e.key === 'amina_reviews_v12') setReviews(parsed || []); if (e.key === 'amina_analytics_v12') setAnalytics(parsed || { qr:0, link:0 });
+        if (e.key === 'amina_customers_v12') setCustomers(parsed || {});
+        if (e.key === 'amina_support_v12') setSupportChat(parsed || []);
       } catch (err) {}
     };
     window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync);

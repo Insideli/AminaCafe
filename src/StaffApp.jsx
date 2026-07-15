@@ -10,6 +10,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []);
   const [chats, setChats] = useLocalStorage('amina_chats_v11', []); // БАЗА ЧАТОВ
+  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v11', { qr: 0, link: 0 });
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
@@ -34,6 +35,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     { id: 'cashier', name: 'Кассиры' }, 
     { id: 'admin', name: 'Админы' }
   ];
+
+  // ВЕРНУЛ ПОТЕРЯННЫЕ ПЕРЕМЕННЫЕ (Из-за которых падал Vercel)
+  const displayedReviews = reviewFilter === 'all' ? (reviews || []) : (reviews || []).filter(r => r.rating === parseInt(reviewFilter));
+
+  const renderTextWithLinks = (text) => {
+    if (!text) return null;
+    const parts = text.split(/(https?:\/\/[^\s]+)/g);
+    return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
+  };
   
   // УМНАЯ КАССА (Смены)
   const now = new Date();
@@ -53,25 +63,24 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       const currentTime = new Date();
       let tablesUpdated = false;
       
-      const newTables = (tables || []).map(t => {
-        if (t.status === 'booked' && t.bookedTime) {
-          const [bookH, bookM] = t.bookedTime.split(':').map(Number);
+      const newTables = (tables || []).map(tab => {
+        if (tab.status === 'booked' && tab.bookedTime) {
+          const [bookH, bookM] = tab.bookedTime.split(':').map(Number);
           const bookDate = new Date();
           bookDate.setHours(bookH, bookM, 0, 0);
           
           const diffMins = (currentTime - bookDate) / (1000 * 60);
           
-          // Опоздание больше 30 минут -> СНИМАЕМ БРОНЬ АВТОМАТИЧЕСКИ
           if (diffMins > 30) {
             tablesUpdated = true;
-            return { ...t, status: 'free', bookedBy: null, bookedTime: null, servedBy: null };
+            return { ...tab, status: 'free', bookedBy: null, bookedTime: null, servedBy: null };
           }
         }
-        return t;
+        return tab;
       });
 
       if (tablesUpdated) setTables(newTables);
-    }, 60000); // Проверяем каждую минуту
+    }, 60000); 
     return () => clearInterval(interval);
   }, [tables, setTables]);
 
@@ -109,7 +118,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
   const [posCart, setPosCart] = useState({});
-  const [showWaiterMenu, setShowWaiterMenu] = useState(false); // Меню поверх экрана
+  const [showWaiterMenu, setShowWaiterMenu] = useState(false);
 
   // --- СОСТОЯНИЯ КАССИРА ---
   const [cashierTab, setCashierTab] = useState('orders'); 
@@ -339,7 +348,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
-    // ЗАГЛУШКА ДЛЯ PALOMA365
     console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: cashierOrderType, items: text, total });
 
     const newOrder = { 
@@ -351,12 +359,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       fullDate: todayDateStr, status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: payMethod 
     };
     setOrders(prev => [newOrder, ...(prev || [])]); setCashierCart({}); alert('Заказ оплачен и отправлен на принтер кухни!');
-  };
-
-  // Вспомогательная функция для ссылок (Именно её не хватало Vercel'у!)
-  const renderTextWithLinks = (text) => {
-    if (!text) return null; const parts = text.split(/(https?:\/\/[^\s]+)/g);
-    return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
   };
 
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
@@ -422,7 +424,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                      </div>
                      <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
+                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'}</span>
                         <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
                         <span>{o.date}</span>
                      </div>
@@ -437,7 +439,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* СТОРИСЫ */}
           {adminTab === 'stories' && (
-            <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
                  <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить Сториc (до 24ч)</h4>
                  <label style={{ cursor: 'pointer', padding: '14px', borderRadius: '10px', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}>
@@ -480,7 +482,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* МЕНЮ С ФИКСИРОВАННОЙ СЕТКОЙ ДЛЯ СТАБИЛЬНОСТИ */}
           {adminTab === 'menu' && (
-            <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+            <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
                 <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить блюдо:</h4>
                 <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
@@ -519,7 +521,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* ПЕРСОНАЛ С ФИЛЬТРОМ */}
           {adminTab === 'staff' && (
-            <div style={{ padding: '20px', maxWidth: '700px', margin: '0 auto' }}>
+            <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
               
               <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', marginBottom: '20px', paddingBottom: '5px' }}>
                 {STAFF_FILTERS.map(f => (
@@ -605,7 +607,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* ЗАЛЫ */}
           {adminTab === 'tables' && (
-            <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+            <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
               <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>🗺 Контроль залов</h2>
               <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #d1d5db' }}>
                 {['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'].map(group => (<button key={group} onClick={() => setSelectedTableGroup(group)} style={{ padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: selectedTableGroup === group ? '#111827' : '#fff', color: selectedTableGroup === group ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{group === 'all' ? 'Все залы' : group}</button>))}
@@ -643,6 +645,37 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* ОТЗЫВЫ */}
+          {adminTab === 'reviews' && (
+            <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
+               <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
+                 {['all', '5', '4', '3', '2', '1'].map(star => (
+                   <button key={star} onClick={() => setReviewFilter(star)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #d1d5db', background: reviewFilter === star ? '#111827' : '#fff', color: reviewFilter === star ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>
+                     {star === 'all' ? 'Все' : `${star} ⭐️`}
+                   </button>
+                 ))}
+               </div>
+
+               {displayedReviews.length === 0 ? <p style={{textAlign: 'center', color: '#6b7280'}}>Отзывов пока нет.</p> : 
+                 displayedReviews.map(rev => (
+                   <div key={rev.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '15px' }}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px'}}>
+                         <div>
+                            <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{rev.author}</p>
+                            <p style={{margin: 0, fontSize: '13px', color: '#6b7280'}}>Обслуживал: {rev.targetName}</p>
+                         </div>
+                         <div style={{textAlign: 'right'}}>
+                            <p style={{margin: '0 0 5px 0', color: '#f59e0b', fontSize: '18px'}}>{'★'.repeat(rev.rating)}{'☆'.repeat(5-rev.rating)}</p>
+                            <p style={{margin: 0, fontSize: '12px', color: '#9ca3af'}}>{rev.date}</p>
+                         </div>
+                      </div>
+                      {rev.text && <p style={{margin: '10px 0 0 0', padding: '12px', background: '#f9fafb', borderRadius: '8px', fontSize: '14px', color: '#4b5563'}}>{rev.text}</p>}
+                   </div>
+                 ))
+               }
             </div>
           )}
         </>
@@ -832,7 +865,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           ЭКРАН 3: ОФИЦИАНТ (СТАБИЛИЗИРОВАННЫЙ ЭКРАН)
       ========================================== */}
       {currentUser.role === 'waiter' && (
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflowX: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', overflowX: 'hidden' }}>
           {showPosModal && renderWaiterPosModal()}
           {notifyBanner}
           <header style={{ backgroundColor: '#10b981', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -874,7 +907,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА (КРАСИВО ПОВЕРХ) */}
           {showWaiterMenu && (
-             <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', width: '100vw' }}>
+             <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', width: '100%' }}>
                <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                  <h2 style={{margin: 0, fontSize: '18px'}}>📖 Меню заведения</h2><button onClick={() => setShowWaiterMenu(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
                </div>
@@ -976,19 +1009,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         </>
       )}
 
-      {/* Функция для рендера ссылок у повара */}
-      {(() => {
-        // Мы уже объявили renderTextWithLinks выше, но если нужно использовать её в JSX повара напрямую, она должна быть доступна в области видимости.
-        // Я вынес её в глобальную область компонента, поэтому она доступна для всех ролей.
-      })()}
-
     </div>
   );
 }
-
-// Вспомогательная функция для рендера ссылок
-const renderTextWithLinks = (text) => {
-  if (!text) return null;
-  const parts = text.split(/(https?:\/\/[^\s]+)/g);
-  return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
-};

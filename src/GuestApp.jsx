@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
+import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
@@ -8,6 +8,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []); 
+  
+  // ТЕХПОДДЕРЖКА
+  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v11', INITIAL_SUPPORT);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportText, setSupportText] = useState('');
 
   const [selectedCategory, setSelectedCategory] = useState('all'); 
   const [activeGuestTab, setActiveGuestTab] = useState('menu'); 
@@ -79,14 +84,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   // ФИКС СКРОЛЛА: Блокируем скролл заднего фона при открытии модалок
   useEffect(() => {
-    const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide;
+    const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal;
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
     }
     return () => { document.body.style.overflow = 'auto'; };
-  }, [paymentStatus, showTimeModal, waiterCallTableId, reviewOrder, showIOSInstallGuide]);
+  }, [paymentStatus, showTimeModal, waiterCallTableId, reviewOrder, showIOSInstallGuide, showSupportModal]);
 
   useEffect(() => {
     let meta = document.querySelector('meta[name="viewport"]');
@@ -341,6 +346,42 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <button onClick={() => setShowIOSInstallGuide(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer'}}>Понятно</button>
            </div>
          </div>
+      )}
+
+      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ --- */}
+      {showSupportModal && (
+        <div className="payment-overlay" onClick={() => setShowSupportModal(false)}>
+          <div className="payment-modal" onClick={e => e.stopPropagation()} style={{ height: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #e5e7eb', flexShrink: 0}}>
+              <div>
+                <h2 style={{margin: 0, color: '#111827', fontSize: '20px'}}>💬 Поддержка</h2>
+                <p style={{margin: '2px 0 0 0', fontSize: '12px', color: '#10b981', fontWeight: 'bold'}}>Онлайн. Отвечаем быстро!</p>
+              </div>
+              <button onClick={() => setShowSupportModal(false)} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold'}}>✕</button>
+            </div>
+            
+            <div style={{flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '5px', marginBottom: '15px'}}>
+               {supportChat.filter(m => m.phone === currentUser.phone).length === 0 && (
+                 <p style={{textAlign: 'center', color: '#6b7280', fontSize: '13px', marginTop: '20px'}}>Здесь вы можете сообщить о баге, глюке или оставить предложение. Напишите нам!</p>
+               )}
+               {supportChat.filter(m => m.phone === currentUser.phone).map(m => (
+                  <div key={m.id} style={{alignSelf: m.sender === 'guest' ? 'flex-end' : 'flex-start', background: m.sender === 'guest' ? '#111827' : '#f3f4f6', color: m.sender === 'guest' ? '#fff' : '#111827', padding: '12px', borderRadius: '14px', maxWidth: '85%'}}>
+                     <p style={{margin: 0, fontSize: '14px', lineHeight: '1.4'}}>{m.text}</p>
+                     <p style={{margin: '5px 0 0 0', fontSize: '10px', opacity: 0.6, textAlign: 'right'}}>{m.time}</p>
+                  </div>
+               ))}
+            </div>
+            
+            <div style={{display: 'flex', gap: '8px', flexShrink: 0}}>
+              <input type="text" value={supportText} onChange={e=>setSupportText(e.target.value)} placeholder="Сообщение разработчикам..." style={{flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box'}} />
+              <button onClick={() => {
+                 if(!supportText.trim()) return;
+                 setSupportChat(prev => [...(prev||[]), {id: Date.now(), phone: currentUser.phone, name: currentUser.name, sender: 'guest', text: supportText, time: new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}]);
+                 setSupportText('');
+              }} style={{background: '#3b82f6', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'}}>➤</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* --- МОДАЛЬНОЕ ОКНО ВРЕМЕНИ ДЛЯ БРОНИ --- */}
@@ -744,6 +785,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
                 <button onClick={handleInstallClick} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                    📱 {lang === 'ru' ? 'Установить приложение' : 'Қосымшаны орнату'}
+                </button>
+
+                {/* КНОПКА ТЕХПОДДЕРЖКИ */}
+                <button onClick={() => setShowSupportModal(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                   💬 {lang === 'ru' ? 'Написать разработчикам' : 'Қолдау қызметіне жазу'}
                 </button>
 
                 <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>{t.orderHistory}:</h3>

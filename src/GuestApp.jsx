@@ -21,6 +21,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [showTimeModal, setShowTimeModal] = useState(false); 
   const [bookingTime, setBookingTime] = useState('19:00');
   
+  // НОВЫЕ СОСТОЯНИЯ ДЛЯ ЛОГИКИ СТОЛОВ И ОФИЦИАНТА
+  const [isChangingTable, setIsChangingTable] = useState(false);
+  const [changingFromTableId, setChangingFromTableId] = useState(null);
+  const [waiterCallTableId, setWaiterCallTableId] = useState(null);
+
   const [paymentStatus, setPaymentStatus] = useState('idle'); 
   const [pendingOrderId, setPendingOrderId] = useState(null); 
   
@@ -31,7 +36,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
 
-  // Состояние для окна инструкции установки PWA на iPhone/iOS
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
 
   const t = {
@@ -51,16 +55,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
 
-  // УМНАЯ УСТАНОВКА НА ГЛАВНЫЙ ЭКРАН
   const handleInstallClick = () => {
-    // 1. Если Android/Chrome разрешил прямую установку
     if (deferredPrompt) {
       deferredPrompt.prompt();
       deferredPrompt.userChoice.then((choiceResult) => {
         if (choiceResult.outcome === 'accepted') { console.log('User accepted the install prompt'); }
       });
     } else {
-      // 2. Если это iPhone/Safari или браузер заблокировал прямую установку
       setShowIOSInstallGuide(true);
     }
   };
@@ -103,11 +104,54 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   }, [orders, currentUser, reviewOrder]);
 
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
-  const initiateBooking = (id) => { setPreOrderTableId(id); setShowTimeModal(true); };
-  const confirmBookingTime = () => { if (!bookingTime) return alert("Выберите время!"); setIsPreOrderFlow(true); setOrderType('in_hall'); setShowTimeModal(false); setActiveGuestTab('menu'); alert(`Время: ${bookingTime} установлено!`); };
-  const bookTableNow = (id) => { setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false } : t)); setOrderType('in_hall'); };
-  const callWaiterForAssistance = (id) => setTables(prev => (prev || []).map(t => t.id === id ? { ...t, isCalling: true } : t));
   
+  // ИСПРАВЛЕННАЯ ЛОГИКА БРОНИРОВАНИЯ
+  const initiateBooking = (id) => { setPreOrderTableId(id); setShowTimeModal(true); };
+  const confirmBookingTime = () => { 
+    if (!bookingTime) return alert("Выберите время!"); 
+    setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime, isCalling: false, calledWaiter: null } : t));
+    setOrderType('in_hall'); 
+    setShowTimeModal(false); 
+    setPreOrderTableId(null);
+    alert(lang === 'ru' ? `Стол успешно забронирован на ${bookingTime}!` : `${bookingTime} уақытына үстел сәтті брондалды!`); 
+  };
+
+  const bookTableNow = (id) => { setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false, calledWaiter: null } : t)); setOrderType('in_hall'); };
+  
+  // ЛОГИКА ОСВОБОДИТЬ ИЛИ ПОМЕНЯТЬ СТОЛ
+  const handleFreeTable = (id) => {
+    setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'free', bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null } : t));
+  };
+
+  const handleChangeTableStart = (id) => {
+    setIsChangingTable(true);
+    setChangingFromTableId(id);
+    alert(lang === 'ru' ? "Выберите новый свободный столик из списка." : "Жаңа бос үстелді таңдаңыз.");
+  };
+
+  const handleChangeTableConfirm = (newId) => {
+    const newTable = (tables || []).find(t => t.id === newId);
+    
+    // Освобождаем старый, занимаем новый
+    setTables(prev => (prev || []).map(t => {
+        if (t.id === changingFromTableId) return { ...t, status: 'free', bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null };
+        if (t.id === newId) return { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCalling: false, calledWaiter: null };
+        return t;
+    }));
+
+    // Переносим заказ(ы) на новый стол
+    setOrders(prev => (prev || []).map(o => {
+        if (o.tableId === changingFromTableId && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected') {
+            return { ...o, tableId: newId, tableName: newTable.name };
+        }
+        return o;
+    }));
+
+    setIsChangingTable(false);
+    setChangingFromTableId(null);
+    alert(lang === 'ru' ? "Вы успешно пересели за " + newTable.name + "!" : "Сіз " + newTable.name + " үстеліне ауыстыңыз!");
+  };
+
   const addToCart = (item) => setCart(prev => ({ ...(prev || {}), [item.id]: { ...item, quantity: ((prev || {})[item.id]?.quantity || 0) + 1 } }));
   const removeFromCart = (id) => setCart(prev => { const updated = { ...(prev || {}) }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; });
 
@@ -291,6 +335,45 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <button onClick={() => setShowIOSInstallGuide(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer'}}>Понятно</button>
            </div>
          </div>
+      )}
+
+      {/* --- МОДАЛЬНОЕ ОКНО ВРЕМЕНИ ДЛЯ БРОНИ --- */}
+      {showTimeModal && (
+        <div className="payment-overlay" onClick={() => setShowTimeModal(false)}>
+          <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center'}}>
+             <h2 style={{margin: '0 0 15px 0', color: '#111827'}}>{lang === 'ru' ? 'Выберите время' : 'Уақытты таңдаңыз'}</h2>
+             <input type="time" value={bookingTime} onChange={e=>setBookingTime(e.target.value)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d5db', marginBottom: '20px', fontSize: '20px', textAlign: 'center', fontWeight: 'bold', color: '#111827'}} />
+             <button onClick={confirmBookingTime} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#10b981', color: '#fff', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginBottom: '10px', fontSize: '16px'}}>{lang === 'ru' ? 'Забронировать' : 'Брондау'}</button>
+             <button onClick={() => setShowTimeModal(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '16px'}}>{lang === 'ru' ? 'Отмена' : 'Болдырмау'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛЬНОЕ ОКНО ВЫЗОВА ОФИЦИАНТА --- */}
+      {waiterCallTableId && (
+        <div className="payment-overlay" onClick={() => setWaiterCallTableId(null)}>
+          <div className="payment-modal" onClick={e => e.stopPropagation()}>
+             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+                <h2 style={{margin: 0, color: '#111827', fontSize: '20px'}}>{lang === 'ru' ? 'Кого позвать?' : 'Кімді шақыру керек?'}</h2>
+                <button onClick={() => setWaiterCallTableId(null)} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold'}}>✕</button>
+             </div>
+             <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px'}}>{lang === 'ru' ? 'Выберите официанта, который подойдет к вашему столику.' : 'Үстеліңізге келетін даяшыны таңдаңыз.'}</p>
+             <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                {availableWaitersList.length === 0 ? <p style={{color: '#dc2626', textAlign: 'center'}}>{lang === 'ru' ? 'Нет свободных официантов' : 'Бос даяшылар жоқ'}</p> : 
+                  availableWaitersList.map(([p, data]) => (
+                     <button key={p} onClick={() => {
+                        setTables(prev => (prev || []).map(t => t.id === waiterCallTableId ? { ...t, isCalling: true, calledWaiter: p } : t));
+                        setWaiterCallTableId(null);
+                        alert(lang === 'ru' ? "Официант уведомлен! Скоро подойдет." : "Даяшыға хабарланды! Жақында келеді.");
+                     }} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderRadius: '14px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer'}}>
+                        <span style={{fontWeight: 'bold', color: '#111827', fontSize: '16px'}}>{data.name}</span>
+                        <span style={{color: '#f59e0b', fontWeight: 'bold', fontSize: '13px'}}>{getWaiterRating(p)}</span>
+                     </button>
+                  ))
+                }
+             </div>
+          </div>
+        </div>
       )}
 
       {/* --- МОДАЛЬНОЕ ОКНО ОТЗЫВА --- */}
@@ -559,16 +642,38 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                         <div style={{ fontSize: '30px', marginBottom: '8px' }}>{table.imgUrl ? <img src={table.imgUrl} alt={table.name} style={{width: '45px', height: '45px', borderRadius: '10px', objectFit: 'cover'}}/> : getTableIcon(table.type)}</div>
                         <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#111827', fontWeight: '800', lineHeight: '1.2' }}>{table.name}</h3>
                         <p style={{ fontSize: '11px', color: '#6b7280', margin: '0 0 10px 0' }}>Мест: {table.seats}</p>
+                        
+                        {/* ЛОГИКА ОТОБРАЖЕНИЯ КНОПОК */}
                         {table.bookedBy === currentUser?.phone && !currentUser.isAnonymous ? (
-                          <div>
-                            <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block', marginBottom: '8px' }}>🔒 Ваш стол</span>
-                            <button onClick={() => callWaiterForAssistance(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: table.isCalling ? '#f59e0b' : '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '12px' }}>{table.isCalling ? 'Идет...' : '🛎️ Официант'}</button>
+                          <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                            <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>🔒 Ваш стол</span>
+                            
+                            {(() => {
+                              // Проверяем, есть ли у гостя активный заказ за этим столом
+                              const hasOrder = (orders || []).some(o => o.tableId === table.id && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected');
+                              
+                              if (hasOrder) {
+                                return <button onClick={() => handleChangeTableStart(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #3b82f6', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🔄 Поменять стол</button>;
+                              } else {
+                                return <button onClick={() => handleFreeTable(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: '#fef2f2', color: '#dc2626', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🚪 Освободить</button>;
+                              }
+                            })()}
+
+                            <button onClick={() => setWaiterCallTableId(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: table.isCalling ? '#f59e0b' : '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '12px' }}>
+                              {table.isCalling ? 'Идет...' : '🛎️ Официант'}
+                            </button>
                           </div>
                         ) : table.status === 'free' && !myCurrentTable ? (
-                          <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
-                            <button onClick={() => { if(currentUser.isAnonymous) return logout(); bookTableNow(table.id); }} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Сесть</button>
-                            <button onClick={() => { if(currentUser.isAnonymous) return logout(); initiateBooking(table.id); }} style={{ padding: '8px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'transparent', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Бронь</button>
-                          </div>
+                          isChangingTable ? (
+                            <button onClick={() => handleChangeTableConfirm(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Пересесть сюда</button>
+                          ) : (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
+                              <button onClick={() => { if(currentUser.isAnonymous) return logout(); bookTableNow(table.id); }} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Сесть</button>
+                              <button onClick={() => { if(currentUser.isAnonymous) return logout(); initiateBooking(table.id); }} style={{ padding: '8px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'transparent', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Бронь</button>
+                            </div>
+                          )
+                        ) : table.status === 'free' && isChangingTable ? (
+                            <button onClick={() => handleChangeTableConfirm(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Пересесть сюда</button>
                         ) : (
                           <div style={{ backgroundColor: '#fef2f2', padding: '10px', borderRadius: '8px' }}><span style={{ color: '#dc2626', fontWeight: '900', fontSize: '12px', display: 'block' }}>Занято</span></div>
                         )}
@@ -629,12 +734,10 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <p style={{ color: '#10b981', fontSize: '24px', fontWeight: '900', margin: 0 }}>Кэшбек: {availableBonuses} ₸</p>
                 </div>
 
-                {/* УМНАЯ КНОПКА УСТАНОВКИ ПРИЛОЖЕНИЯ */}
                 <button onClick={handleInstallClick} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                    📱 {lang === 'ru' ? 'Установить приложение' : 'Қосымшаны орнату'}
                 </button>
 
-                {/* ИСТОРИЯ ЗАКАЗОВ */}
                 <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>{t.orderHistory}:</h3>
                 {myOrdersHistory.length === 0 ? <p style={{color: '#6b7280'}}>{t.noOrders}</p> : 
                   myOrdersHistory.map(o => (
@@ -644,7 +747,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                          <span style={{fontWeight: '900', color: '#10b981', fontSize: '16px'}}>{o.total} ₸</span>
                        </div>
                        
-                       {/* СТАТУС ОПЛАТЫ ДЛЯ ГОСТЯ */}
                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: o.status === 'rejected' ? '#dc2626' : o.status === 'transfer_pending' ? '#f59e0b' : '#10b981'}}>
                          {o.status === 'rejected' ? (lang === 'ru' ? 'Оплата отменена' : 'Төлемнен бас тартылды') : 
                           o.status === 'transfer_pending' ? (lang === 'ru' ? 'Ожидание проверки оплаты' : 'Төлемді тексеру күтілуде') : 
@@ -666,7 +768,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         )}
       </main>
 
-      {/* НИЖНЯЯ НАВИГАЦИЯ С ИНДИКАТОРОМ */}
       <nav className="mobile-nav">
         <button className={`nav-item ${activeGuestTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveGuestTab('menu')}><span className="nav-icon">🍔</span> {t.menu}</button>
         <button className={`nav-item ${activeGuestTab === 'table' ? 'active' : ''}`} onClick={() => setActiveGuestTab('table')}><span className="nav-icon">🪑</span> {t.halls}</button>
@@ -685,4 +786,4 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       </nav>
     </div>
   );
-                                                                             }
+}

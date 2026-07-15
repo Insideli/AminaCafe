@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { INITIAL_MENU, CATEGORIES, INITIAL_STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
+import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
-  const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', INITIAL_STORIES);
+  const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []); // Сторисы загружаются из базы
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []); 
@@ -34,7 +34,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
   const [activeStory, setActiveStory] = useState(null);
 
-  // СЛОВАРЬ ПЕРЕВОДОВ ИНТЕРФЕЙСА (Именно его не хватало для работы!)
+  // СЛОВАРЬ ПЕРЕВОДОВ ИНТЕРФЕЙСА
   const t = {
     menu: lang === 'ru' ? 'Меню' : 'Мәзір',
     halls: lang === 'ru' ? 'Залы' : 'Залдар',
@@ -109,6 +109,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
   }, []);
 
+  // Синхронизация статусов оплат (Kaspi / Наличные)
   useEffect(() => {
     if (pendingOrderId && (paymentStatus === 'processing' || paymentStatus === 'waiter_pending')) {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
@@ -119,6 +120,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     }
   }, [orders, pendingOrderId, paymentStatus]);
 
+  // Система отзывов (через 30 секунд после закрытия заказа)
   useEffect(() => {
     const interval = setInterval(() => {
        if (currentUser?.isAnonymous || reviewOrder) return;
@@ -155,6 +157,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name[lang] || i.name.ru || i.name} (x${i.quantity})`).join(', ') : (lang === 'ru' ? "Бронь места" : "Орынды брондау");
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
     
+    // ЛОГИКА СМЕНЫ (УМНАЯ КАССА) - Смена до 6 утра считается "вчерашней"
     const now = new Date();
     const shiftDate = new Date(now);
     if (now.getHours() < 6) shiftDate.setDate(shiftDate.getDate() - 1);
@@ -182,11 +185,17 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     setPaymentStatus('processing'); 
   };
 
+  // ИМИТАЦИЯ APPLE PAY И КАРТЫ (Загрузка 2-3 секунды перед успехом)
   const confirmDirectPayment = (method) => {
-    const newOrder = createOrderObject('new', null, null, method);
-    setOrders(prev => [newOrder, ...(prev || [])]);
-    if (isPreOrderFlow && preOrderTableId) setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
-    setPaymentStatus('success');
+    setPaymentStatus('processing'); // Показываем крутилку
+    setTimeout(() => {
+      const newOrder = createOrderObject('new', null, null, method);
+      setOrders(prev => [newOrder, ...(prev || [])]);
+      if (isPreOrderFlow && preOrderTableId) {
+        setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
+      }
+      setPaymentStatus('success'); // Оплата прошла успешно
+    }, 2500); // Имитация задержки эквайринга
   };
 
   const handleCashSelection = () => {
@@ -238,6 +247,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const availableWaitersList = Object.entries(roles || {}).filter(([p, data]) => data.role === 'waiter' && data.onShift);
 
   const myOrdersHistory = (orders || []).filter(o => o.phone === currentUser.phone);
+
+  // ФИЛЬТР СТОРИС: Показываем только активные и те, которым меньше 24 часов
+  const activeStories = (storiesDb || []).filter(s => {
+    if (!s.isActive) return false;
+    const isExpired = (Date.now() - (s.timestamp || 0)) > 24 * 60 * 60 * 1000;
+    return !isExpired;
+  });
 
   return (
     <div className="app-wrapper">
@@ -325,11 +341,17 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         @media (min-width: 1200px) { .tables-grid { grid-template-columns: repeat(5, 1fr); } }
       `}}/>
 
-      {/* --- ПОЛНОЭКРАННАЯ СТОРИС --- */}
+      {/* --- ПОЛНОЭКРАННАЯ СТОРИС С ПОДДЕРЖКОЙ ВИДЕО --- */}
       {activeStory && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }} onClick={() => setActiveStory(null)}>
-           <button onClick={() => setActiveStory(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: '40px', height: '40px', borderRadius: '50%', fontSize: '20px', cursor: 'pointer' }}>✕</button>
-           <img src={activeStory.imgUrl} style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain' }} alt="Story" />
+           <button onClick={() => setActiveStory(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: '40px', height: '40px', borderRadius: '50%', fontSize: '20px', cursor: 'pointer', zIndex: 10 }}>✕</button>
+           
+           {activeStory.type === 'video' ? (
+             <video src={activeStory.imgUrl} controls autoPlay style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain' }} onClick={e => e.stopPropagation()} />
+           ) : (
+             <img src={activeStory.imgUrl} style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain' }} alt="Story" onClick={e => e.stopPropagation()} />
+           )}
+           
            <h2 style={{ color: '#fff', marginTop: '20px', textAlign: 'center' }}>{activeStory.title[lang] || activeStory.title.ru || activeStory.title}</h2>
         </div>
       )}
@@ -480,7 +502,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЭКРАН 3: ЗАГРУЗКА */}
+            {/* ЭКРАН 3: ЗАГРУЗКА (Apple Pay / Карта) */}
             {paymentStatus === 'processing' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
@@ -501,7 +523,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
                 <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#dc2626'}}>{t.payReject}</h2>
-                <button onClick={() => setPaymentStatus('kaspi_card')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>OK</button>
+                <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>OK</button>
               </div>
             )}
 
@@ -564,11 +586,17 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
             <div className="content-area">
               <button className="hamburger-menu-trigger" onClick={() => setIsMenuOpen(true)}><span>☰</span> {t.cats}</button>
               
-              {/* СТОРИСЫ */}
+              {/* СТОРИСЫ (ОТФИЛЬТРОВАННЫЕ ДО 24 ЧАСОВ) */}
               <div className="stories-row">
-                {(storiesDb || []).filter(s => s.isActive).map(story => (
+                {activeStories.map(story => (
                   <div key={story.id} className="story-item" onClick={() => setActiveStory(story)}>
-                    <div className="story-circle"><img src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} alt=""/></div>
+                    <div className="story-circle">
+                      {story.type === 'video' ? (
+                        <video src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} muted />
+                      ) : (
+                        <img src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} alt=""/>
+                      )}
+                    </div>
                     <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#111827' }}>{story.title[lang] || story.title.ru || story.title}</span>
                   </div>
                 ))}

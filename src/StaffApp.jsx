@@ -7,9 +7,10 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
+  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
+  
   const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); 
   const [reviews] = useLocalStorage('amina_reviews_v11', []);
-  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
@@ -51,11 +52,13 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const allDates = [...new Set((orders || []).map(o => o.fullDate))].sort().reverse();
   if (!allDates.includes(todayDateStr)) allDates.unshift(todayDateStr);
 
+  // === АВТО-СНЯТИЕ БРОНИ (ИСПРАВЛЕННЫЙ ТАЙМЕР) ===
   useEffect(() => {
     const interval = setInterval(() => {
       setTables(prev => {
         const currentTime = new Date();
         let tablesUpdated = false;
+        
         const newTables = (prev || []).map(tab => {
           if (tab.status === 'booked' && tab.bookedTime) {
             const [bookH, bookM] = tab.bookedTime.split(':').map(Number);
@@ -71,6 +74,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
           }
           return tab;
         });
+
         return tablesUpdated ? newTables : prev;
       });
     }, 60000); 
@@ -363,7 +367,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
             <button onClick={() => setAdminTab('stories')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'stories' ? '#f59e0b' : '#f3f4f6', color: adminTab === 'stories' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📸 Сторисы</button>
             <button onClick={() => setAdminTab('chats')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'chats' ? '#ef4444' : '#f3f4f6', color: adminTab === 'chats' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', position: 'relative' }}>
                Чаты 💬
-               {chats.filter(c => c.to === 'cafe' && !c.isRead).length > 0 && <span style={{position: 'absolute', top: '-5px', right: '-5px', background: '#111827', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px'}}>{chats.filter(c => c.to === 'cafe' && !c.isRead).length}</span>}
+               {(chats || []).filter(c => c.to === 'cafe' && !c.isRead).length > 0 && <span style={{position: 'absolute', top: '-5px', right: '-5px', background: '#111827', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px'}}>{(chats || []).filter(c => c.to === 'cafe' && !c.isRead).length}</span>}
             </button>
             <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#f3f4f6', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
             <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#f3f4f6', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
@@ -677,7 +681,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
             <button onClick={() => setCashierTab('pos')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'pos' ? '#3b82f6' : '#f3f4f6', color: cashierTab === 'pos' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🛒 Терминал кассы</button>
             <button onClick={() => setCashierTab('chats')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'chats' ? '#ef4444' : '#f3f4f6', color: cashierTab === 'chats' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', position: 'relative' }}>
                Чаты 💬
-               {chats.filter(c => c.to === 'cafe' && !c.isRead).length > 0 && <span style={{position: 'absolute', top: '-5px', right: '-5px', background: '#111827', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px'}}>{chats.filter(c => c.to === 'cafe' && !c.isRead).length}</span>}
+               {(chats || []).filter(c => c.to === 'cafe' && !c.isRead).length > 0 && <span style={{position: 'absolute', top: '-5px', right: '-5px', background: '#111827', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px'}}>{(chats || []).filter(c => c.to === 'cafe' && !c.isRead).length}</span>}
             </button>
             <button onClick={() => setCashierTab('stories')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'stories' ? '#f59e0b' : '#f3f4f6', color: cashierTab === 'stories' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📸 Сторисы</button>
             <button onClick={() => setCashierTab('report')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'report' ? '#8b5cf6' : '#f3f4f6', color: cashierTab === 'report' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 Отчет смены</button>

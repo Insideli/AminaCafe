@@ -301,11 +301,8 @@ export const CATEGORIES = [
   { id: 'other', name: 'Доп', icon: '🥖' }
 ];
 
-export const INITIAL_STORIES = [
-  { id: 1, title: "🔥 Сэты", imgUrl: P_MEAT, isActive: true, type: 'image', timestamp: Date.now() },
-  { id: 2, title: "👨‍🍳 На гриле", imgUrl: P_CHICKEN, isActive: true, type: 'image', timestamp: Date.now() },
-  { id: 3, title: "🥤 Новинки", imgUrl: P_DRINK, isActive: true, type: 'image', timestamp: Date.now() }
-];
+// УБРАЛ ВСЕ ТЕСТОВЫЕ СТОРИСЫ. ТЕПЕРЬ ОНИ ЧИСТЫЕ.
+export const INITIAL_STORIES = [];
 
 export const INITIAL_TABLES = [
   { id: 1, group: "Белый зал", type: "table", name: "Стол 1 (Белый зал)", seats: 4, status: "free", bookedBy: null, bookedTime: null, isCalling: false, isCallingForBill: false, imgUrl: "", servedBy: null },

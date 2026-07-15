@@ -6,21 +6,27 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [tables, setTables] = useLocalStorage('amina_tables_v11', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
-  const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []); // Чистая база сторисов
+  const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []);
+  const [chats, setChats] = useLocalStorage('amina_chats_v11', []); // БАЗА ЧАТОВ
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v11', { qr: 0, link: 0 });
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
   const [selectedTableGroup, setSelectedTableGroup] = useState('all');
+  const [staffFilter, setStaffFilter] = useState('all'); // ФИЛЬТР ПЕРСОНАЛА
   
-  // Словарь для перевода интерфейса персонала
+  // Чаты:
+  const [activeChatPhone, setActiveChatPhone] = useState(null);
+  const [replyText, setReplyText] = useState('');
+
+  // Словарь
   const t = {
     logout: lang === 'ru' ? 'Выйти' : 'Шығу'
   };
   
-  // УМНАЯ КАССА (Определение смены с учетом ночи)
+  // УМНАЯ КАССА (Смены)
   const now = new Date();
   const currentShiftDate = new Date(now);
   if (now.getHours() < 6) {
@@ -29,7 +35,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const todayDateStr = currentShiftDate.toLocaleDateString('ru-RU');
   
   const [reportDate, setReportDate] = useState(todayDateStr);
-  
   const allDates = [...new Set((orders || []).map(o => o.fullDate))].sort().reverse();
   if (!allDates.includes(todayDateStr)) allDates.unshift(todayDateStr);
 
@@ -40,13 +45,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       let tablesUpdated = false;
       
       const newTables = (tables || []).map(t => {
-        if (t.status === 'occupied' && t.bookedBy && t.bookedTime) {
+        if (t.status === 'booked' && t.bookedTime) {
           const [bookH, bookM] = t.bookedTime.split(':').map(Number);
           const bookDate = new Date();
           bookDate.setHours(bookH, bookM, 0, 0);
           
+          // Если бронь на следующий день после полуночи - пропускаем сложную логику в MVP
           const diffMins = (currentTime - bookDate) / (1000 * 60);
           
+          // Опоздание больше 30 минут -> СНИМАЕМ БРОНЬ АВТОМАТИЧЕСКИ
           if (diffMins > 30) {
             tablesUpdated = true;
             return { ...t, status: 'free', bookedBy: null, bookedTime: null, servedBy: null };
@@ -56,7 +63,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       });
 
       if (tablesUpdated) setTables(newTables);
-    }, 60000); // Проверка каждую минуту
+    }, 60000); // Проверяем каждую минуту
     return () => clearInterval(interval);
   }, [tables, setTables]);
 
@@ -94,20 +101,89 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
   const [posCart, setPosCart] = useState({});
-  const [showWaiterMenu, setShowWaiterMenu] = useState(false); // Меню поверх экрана
+  const [showWaiterMenu, setShowWaiterMenu] = useState(false);
 
   // --- СОСТОЯНИЯ КАССИРА ---
   const [cashierTab, setCashierTab] = useState('orders'); 
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
-  // ФУНКЦИИ АДМИНА И КАССИРА ДЛЯ СТОРИСОВ
+  // ФУНКЦИИ ЧАТА (Техподдержка)
+  const sendAdminReply = (e) => {
+    e.preventDefault();
+    if(!replyText.trim() || !activeChatPhone) return;
+    const newMsg = { id: Date.now(), from: 'cafe', to: activeChatPhone, name: currentUser.name, text: replyText, timestamp: Date.now(), isRead: false, type: 'support' };
+    setChats(prev => [...(prev || []), newMsg]);
+    setReplyText('');
+  };
+
+  const renderChatsInterface = () => {
+    const chatUsers = [...new Set((chats || []).map(c => c.from === 'cafe' ? c.to : c.from))].filter(Boolean);
+    
+    if (!activeChatPhone) {
+      return (
+        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+          <h3 style={{color: '#111827', marginBottom: '15px'}}>💬 Диалоги с гостями</h3>
+          {chatUsers.length === 0 ? <p style={{color: '#6b7280', textAlign: 'center', marginTop: '30px'}}>Сообщений пока нет.</p> :
+            chatUsers.map(phone => {
+               const lastMsg = (chats || []).filter(c => c.from === phone || c.to === phone).pop();
+               const guestName = customers[phone]?.name || roles[phone]?.name || phone;
+               const unreadCount = (chats || []).filter(c => c.from === phone && !c.isRead).length;
+               return (
+                 <div key={phone} onClick={() => {
+                    setActiveChatPhone(phone);
+                    setChats(prev => prev.map(c => c.from === phone ? {...c, isRead: true} : c));
+                 }} style={{ background: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <div style={{minWidth: 0, paddingRight: '10px'}}>
+                     <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{guestName}</p>
+                     <p style={{margin: 0, fontSize: '13px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{lastMsg?.text}</p>
+                   </div>
+                   <div style={{display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0}}>
+                     {unreadCount > 0 && <span style={{background: '#ef4444', color: '#fff', padding: '4px 10px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold'}}>{unreadCount}</span>}
+                     <span style={{color: '#d1d5db', fontSize: '20px'}}>➔</span>
+                   </div>
+                 </div>
+               )
+            })
+          }
+        </div>
+      );
+    } else {
+       const guestMsgs = (chats || []).filter(c => c.from === activeChatPhone || c.to === activeChatPhone);
+       const guestName = customers[activeChatPhone]?.name || activeChatPhone;
+       return (
+         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxWidth: '800px', margin: '0 auto', background: '#fff', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+           <div style={{ padding: '15px', background: '#111827', color: '#fff', display: 'flex', alignItems: 'center', gap: '15px' }}>
+             <button onClick={() => setActiveChatPhone(null)} style={{background: '#374151', border: 'none', color: '#fff', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
+             <h3 style={{margin: 0, fontSize: '16px'}}>{guestName}</h3>
+           </div>
+           <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', background: '#f9fafb' }}>
+              {guestMsgs.map(msg => {
+                const isCafe = msg.from === 'cafe';
+                return (
+                  <div key={msg.id} style={{ alignSelf: isCafe ? 'flex-end' : 'flex-start', maxWidth: '80%', background: isCafe ? '#10b981' : '#e5e7eb', color: isCafe ? '#fff' : '#111827', padding: '12px 16px', borderRadius: isCafe ? '16px 16px 0 16px' : '16px 16px 16px 0', fontSize: '14px', lineHeight: '1.4' }}>
+                     {msg.text}
+                     <div style={{fontSize: '10px', textAlign: 'right', marginTop: '5px', opacity: 0.7}}>
+                       {new Date(msg.timestamp).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
+                     </div>
+                  </div>
+                )
+              })}
+           </div>
+           <form onSubmit={sendAdminReply} style={{ padding: '15px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '10px', background: '#fff' }}>
+              <input type="text" value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Сообщение..." style={{flex: 1, padding: '14px', borderRadius: '24px', border: '1px solid #d1d5db', outline: 'none', fontSize: '14px'}} />
+              <button type="submit" style={{width: '48px', height: '48px', borderRadius: '50%', background: '#111827', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'}}>➔</button>
+           </form>
+         </div>
+       )
+    }
+  };
+
+  // ФУНКЦИИ АДМИНА
   const handleStoryUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
-    // Проверка видео на 1 минуту (60 сек) здесь можно сделать, 
-    // но базово ограничим сам файл или просто сохраним (в MVP DataURL может быть тяжелым для видео, но мы сохраним)
     const isVideo = file.type.startsWith('video/');
     if (isVideo && file.size > 15 * 1024 * 1024) return alert("Видео слишком большое! Максимум 15 МБ.");
 
@@ -121,10 +197,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         imgUrl: event.target.result,
         isActive: true,
         type: isVideo ? 'video' : 'image',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        viewedBy: []
       };
       setStoriesDb(prev => [newStory, ...(prev || [])]);
-      alert("Сториc успешно загружен и виден гостям!"); 
+      alert("Сториc успешно загружен и виден гостям (на 24 часа)!"); 
     };
     reader.readAsDataURL(file);
   };
@@ -206,7 +283,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
-    // ЗАГЛУШКА ДЛЯ PALOMA365 (Отправка чека на кухню)
+    // ЗАГЛУШКА ДЛЯ PALOMA365
     console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: table?.name, items: text, total });
 
     const newOrder = { 
@@ -272,8 +349,14 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
+  const STAFF_FILTERS = [
+    { id: 'all', name: 'Все' }, { id: 'waiter', name: 'Официанты' }, 
+    { id: 'cook', name: 'Повара' }, { id: 'chef', name: 'Шеф' }, 
+    { id: 'cashier', name: 'Кассиры' }, { id: 'admin', name: 'Админы' }
+  ];
+
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px', overflowX: 'hidden', width: '100%', maxWidth: '100vw' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px', overflowX: 'hidden', width: '100vw', maxWidth: '100vw' }}>
       
       {/* ==========================================
           ЭКРАН 1: АДМИНИСТРАТОР (ДИРЕКТОР)
@@ -286,17 +369,22 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <HeaderControls />
           </header>
 
-          <div style={{ display: 'flex', gap: '10px', padding: '20px', overflowX: 'auto' }}>
-            <button onClick={() => setAdminTab('stats')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'stats' ? '#10b981' : '#e5e7eb', color: adminTab === 'stats' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 Выручка</button>
-            <button onClick={() => setAdminTab('stories')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'stories' ? '#f59e0b' : '#e5e7eb', color: adminTab === 'stories' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📸 Сторисы</button>
-            <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
-            <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#e5e7eb', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
-            <button onClick={() => setAdminTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'tables' ? '#ec4899' : '#e5e7eb', color: adminTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
+          <div style={{ display: 'flex', gap: '10px', padding: '20px', overflowX: 'auto', borderBottom: '1px solid #e5e7eb' }}>
+            <button onClick={() => setAdminTab('stats')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'stats' ? '#10b981' : '#f3f4f6', color: adminTab === 'stats' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 Выручка</button>
+            <button onClick={() => setAdminTab('stories')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'stories' ? '#f59e0b' : '#f3f4f6', color: adminTab === 'stories' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📸 Сторисы</button>
+            <button onClick={() => setAdminTab('chats')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'chats' ? '#ef4444' : '#f3f4f6', color: adminTab === 'chats' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', position: 'relative' }}>
+               Чаты 💬
+               {chats.filter(c => c.to === 'cafe' && !c.isRead).length > 0 && <span style={{position: 'absolute', top: '-5px', right: '-5px', background: '#111827', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px'}}>{chats.filter(c => c.to === 'cafe' && !c.isRead).length}</span>}
+            </button>
+            <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#f3f4f6', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
+            <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#f3f4f6', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
+            <button onClick={() => setAdminTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'tables' ? '#ec4899' : '#f3f4f6', color: adminTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
+            <button onClick={() => setAdminTab('reviews')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'reviews' ? '#14b8a6' : '#f3f4f6', color: adminTab === 'reviews' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>⭐️ Отзывы</button>
           </div>
           
           {/* ВЫРУЧКА */}
           {adminTab === 'stats' && (
-            <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h3 style={{color: '#111827', margin: 0}}>Смена:</h3>
                 <select value={reportDate} onChange={e => setReportDate(e.target.value)} style={{ padding: '10px', borderRadius: '10px', border: '2px solid #111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
@@ -327,7 +415,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                      </div>
                      <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
+                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'}</span>
                         <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
                         <span>{o.date}</span>
                      </div>
@@ -337,42 +425,55 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             </div>
           )}
 
+          {/* ЧАТЫ АДМИНА */}
+          {adminTab === 'chats' && renderChatsInterface()}
+
           {/* СТОРИСЫ */}
           {adminTab === 'stories' && (
-            <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
                  <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить Сториc (до 24ч)</h4>
                  <label style={{ cursor: 'pointer', padding: '14px', borderRadius: '10px', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}>
-                    📷 Выбрать Фото или Видео
+                    📷 Выбрать Фото или Видео (до 15 МБ)
                     <input type="file" accept="image/*,video/*" style={{display: 'none'}} onChange={handleStoryUpload} />
                  </label>
               </div>
 
               <h3 style={{color: '#111827', marginBottom: '15px'}}>Архив историй:</h3>
               <div style={{ display: 'grid', gap: '15px' }}>
-                {(storiesDb || []).map(s => (
-                  <div key={s.id} style={{ background: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', opacity: s.isActive ? 1 : 0.5 }}>
-                    {s.type === 'video' ? (
-                       <video src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} muted />
-                    ) : (
-                       <img src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} alt="" />
-                    )}
-                    <div style={{flex: 1}}>
-                      <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title.ru || s.title}</p>
-                      <p style={{margin: '0 0 10px 0', fontSize: '11px', color: '#6b7280'}}>Загружено: {new Date(s.timestamp).toLocaleDateString('ru-RU')}</p>
-                      <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 12px', borderRadius: '8px', border: 'none', background: s.isActive ? '#fee2e2' : '#d1fae5', color: s.isActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer'}}>
-                         {s.isActive ? 'Скрыть' : 'Опубликовать (24ч)'}
-                      </button>
+                {(storiesDb || []).length === 0 ? <p style={{color: '#6b7280'}}>Сторисов пока нет.</p> : (storiesDb || []).map(s => {
+                  const isExpired = (Date.now() - (s.timestamp || 0)) > 24 * 60 * 60 * 1000;
+                  const isReallyActive = s.isActive && !isExpired;
+
+                  return (
+                    <div key={s.id} style={{ background: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', opacity: isReallyActive ? 1 : 0.5 }}>
+                      {s.type === 'video' ? (
+                         <video src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} muted />
+                      ) : (
+                         <img src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} alt="" />
+                      )}
+                      <div style={{flex: 1}}>
+                        <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title.ru || s.title}</p>
+                        <p style={{margin: '0 0 5px 0', fontSize: '11px', color: '#6b7280'}}>Загружено: {new Date(s.timestamp).toLocaleDateString('ru-RU')}</p>
+                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: '#ea580c'}}>👁 Просмотров: {s.viewedBy ? s.viewedBy.length : 0}</p>
+                        
+                        <div style={{display: 'flex', gap: '5px'}}>
+                          <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
+                             {isReallyActive ? 'Скрыть у гостей' : 'Опубликовать заново (24ч)'}
+                          </button>
+                          <button onClick={() => setStoriesDb(prev => prev.filter(st => st.id !== s.id))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>Удалить</button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {/* МЕНЮ */}
+          {/* МЕНЮ С ФИКСИРОВАННОЙ СЕТКОЙ ДЛЯ СТАБИЛЬНОСТИ */}
           {adminTab === 'menu' && (
-            <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
                 <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить блюдо:</h4>
                 <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
@@ -386,22 +487,22 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               <h3 style={{color: '#111827', marginBottom: '15px'}}>Управление меню:</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {(menu || []).map(item => (
-                  <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
+                  <div key={item.id} style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
                     <div style={{fontSize: '25px', display: 'flex', justifyContent: 'center'}}>
                       {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}
                     </div>
-                    <div style={{minWidth: 0}}>
+                    <div style={{minWidth: 0, overflow: 'hidden'}}>
                       <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>
                       <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold' }}>{item.price} ₸</p>
-                      {item.isStop && <p style={{margin: '2px 0 0 0', fontSize: '11px', color: '#dc2626'}}>Стоп: {item.stopReason}</p>}
+                      {item.isStop && <p style={{margin: '2px 0 0 0', fontSize: '11px', color: '#dc2626', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>Стоп: {item.stopReason}</p>}
                     </div>
-                    <label style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', fontSize: '12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <label style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', fontSize: '12px', textAlign: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>
                       📷 Фото
                       <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => handlePhotoUpload(e, item.id)} />
                     </label>
-                    <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
-                       <button onClick={() => toggleStopList(item.id)} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
-                       <button onClick={() => setMenu((menu || []).filter(m => m.id !== item.id))} style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#f3f4f6', color: '#4b5563', border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px' }}>Удалить</button>
+                    <div style={{display: 'flex', flexDirection: 'column', gap: '5px', flexShrink: 0}}>
+                       <button onClick={() => toggleStopList(item.id)} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap', width: '70px' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+                       <button onClick={() => setMenu((menu || []).filter(m => m.id !== item.id))} style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#f3f4f6', color: '#4b5563', border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px', width: '70px' }}>Удалить</button>
                     </div>
                   </div>
                 ))}
@@ -409,9 +510,18 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             </div>
           )}
 
-          {/* ПЕРСОНАЛ */}
+          {/* ПЕРСОНАЛ С ФИЛЬТРОМ */}
           {adminTab === 'staff' && (
-            <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '700px', margin: '0 auto' }}>
+              
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', marginBottom: '20px', paddingBottom: '5px' }}>
+                {STAFF_FILTERS.map(f => (
+                  <button key={f.id} onClick={() => setStaffFilter(f.id)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #d1d5db', background: staffFilter === f.id ? '#8b5cf6' : '#fff', color: staffFilter === f.id ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+
               {editStaffModal && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
                   <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative' }}>
@@ -440,37 +550,41 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                 </div>
               )}
 
-              <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
-                <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Новый сотрудник:</h4>
-                <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
-                   <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                   <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                   <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                </div>
-                <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
-                  <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select>
-                  {newWaiter.role === 'cook' && (
-                     <select value={newWaiter.station} onChange={e => setNewWaiter({...newWaiter, station: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
-                       <option value="hot">Горячий цех</option><option value="cold">Холодный цех</option><option value="bar">Бар</option><option value="mangal">Мангал</option>
-                     </select>
+              {staffFilter === 'all' && (
+                <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
+                  <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Новый сотрудник:</h4>
+                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                     <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                     <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                     <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                  </div>
+                  <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                    <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select>
+                    {newWaiter.role === 'cook' && (
+                       <select value={newWaiter.station} onChange={e => setNewWaiter({...newWaiter, station: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+                         <option value="hot">Горячий цех</option><option value="cold">Холодный цех</option><option value="bar">Бар</option><option value="mangal">Мангал</option>
+                       </select>
+                    )}
+                    <input type="text" placeholder="График (напр. 2/2)" value={newWaiter.schedule} onChange={e => setNewWaiter({...newWaiter, schedule: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                  </div>
+                  {newWaiter.role === 'waiter' && (
+                    <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
+                      <input type="checkbox" checked={newWaiter.isSenior} onChange={e => setNewWaiter({...newWaiter, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
+                      👑 Назначить Старшим
+                    </label>
                   )}
-                  <input type="text" placeholder="График (напр. 2/2)" value={newWaiter.schedule} onChange={e => setNewWaiter({...newWaiter, schedule: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                  <button onClick={handleAddWaiter} style={{ width: '100%', padding: '14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Добавить сотрудника</button>
                 </div>
-                {newWaiter.role === 'waiter' && (
-                  <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
-                    <input type="checkbox" checked={newWaiter.isSenior} onChange={e => setNewWaiter({...newWaiter, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
-                    👑 Назначить Старшим
-                  </label>
-                )}
-                <button onClick={handleAddWaiter} style={{ width: '100%', padding: '14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Добавить сотрудника</button>
-              </div>
+              )}
 
-              {Object.entries(roles || {}).filter(([phone, data]) => data.role !== 'admin').map(([phone, data]) => (
+              {Object.entries(roles || {})
+                .filter(([phone, data]) => staffFilter === 'all' ? true : data.role === staffFilter)
+                .map(([phone, data]) => (
                 <div key={phone} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <p style={{ margin: 0, fontWeight: '900', color: '#111827', fontSize: '16px' }}>{data.name} {data.isSenior ? '👑' : ''}</p>
-                      <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280' }}>Логин: <b>{phone}</b> | Роль: {data.role === 'cook' ? `Повар (${data.station})` : data.role === 'waiter' ? 'Официант' : data.role === 'cashier' ? 'Кассир' : 'Шеф'}</p>
+                      <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280' }}>Логин: <b>{phone}</b> | Роль: {data.role === 'cook' ? `Повар (${data.station})` : data.role === 'waiter' ? 'Официант' : data.role === 'cashier' ? 'Кассир' : data.role === 'admin' ? 'Админ' : 'Шеф'}</p>
                     </div>
                     <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
                        <button onClick={() => openEditStaffModal(phone, data)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>✏️ Изменить</button>
@@ -484,7 +598,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {/* ЗАЛЫ */}
           {adminTab === 'tables' && (
-            <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
               <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>🗺 Контроль залов</h2>
               <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #d1d5db' }}>
                 {['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'].map(group => (<button key={group} onClick={() => setSelectedTableGroup(group)} style={{ padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: selectedTableGroup === group ? '#111827' : '#fff', color: selectedTableGroup === group ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{group === 'all' ? 'Все залы' : group}</button>))}
@@ -503,17 +617,17 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                            <div key={t.id} style={{ padding: '15px', borderRadius: '12px', backgroundColor: '#fff', border: t.status === 'free' ? '1px solid #e5e7eb' : '2px solid #111827' }}>
                               <div style={{display: 'flex', justifyContent: 'space-between'}}>
                                  <p style={{ margin: 0, fontWeight: '900', fontSize: '15px', color: '#111827' }}>{t.name}</p>
-                                 <span style={{ fontSize: '11px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '6px', background: t.status === 'free' ? '#f3f4f6' : '#fef3c7', color: t.status === 'free' ? '#6b7280' : '#b45309' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
+                                 <span style={{ fontSize: '11px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '6px', background: t.status === 'free' ? '#f3f4f6' : '#fef3c7', color: t.status === 'free' ? '#6b7280' : '#b45309' }}>{t.status === 'free' ? 'Свободен' : t.status === 'booked' ? 'Бронь' : 'Занят'}</span>
                               </div>
                               {t.servedBy && <p style={{fontSize: '13px', color: '#4b5563', margin: '8px 0 0 0'}}>🏃‍♂️ Официант: <b>{roles[t.servedBy]?.name || 'Неизвестно'}</b></p>}
                               {t.bookedBy && (
                                  <div style={{marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px dashed #10b981'}}>
-                                   <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#065f46', fontWeight: 'bold'}}>📅 Бронь: {t.bookedTime}</p>
+                                   <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#065f46', fontWeight: 'bold'}}>📅 Время: {t.bookedTime}</p>
                                    <p style={{margin: 0, fontSize: '12px', color: '#111827'}}>{bookingCust?.name || 'Гость'}<br/>{t.bookedBy}</p>
                                  </div>
                               )}
                               {t.status !== 'free' && (
-                                 <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Освободить стол</button>
+                                 <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, isCallingForBill: false, bookedTime: null } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>{t.status === 'booked' ? 'Снять бронь (Опоздал)' : 'Освободить стол'}</button>
                               )}
                            </div>
                          )
@@ -522,6 +636,37 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* ОТЗЫВЫ */}
+          {adminTab === 'reviews' && (
+            <div style={{ padding: '20px', maxWidth: '700px', margin: '0 auto' }}>
+               <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
+                 {['all', '5', '4', '3', '2', '1'].map(star => (
+                   <button key={star} onClick={() => setReviewFilter(star)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #d1d5db', background: reviewFilter === star ? '#111827' : '#fff', color: reviewFilter === star ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>
+                     {star === 'all' ? 'Все' : `${star} ⭐️`}
+                   </button>
+                 ))}
+               </div>
+
+               {displayedReviews.length === 0 ? <p style={{textAlign: 'center', color: '#6b7280'}}>Отзывов пока нет.</p> : 
+                 displayedReviews.map(rev => (
+                   <div key={rev.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '15px' }}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px'}}>
+                         <div>
+                            <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{rev.author}</p>
+                            <p style={{margin: 0, fontSize: '13px', color: '#6b7280'}}>Обслуживал: {rev.targetName}</p>
+                         </div>
+                         <div style={{textAlign: 'right'}}>
+                            <p style={{margin: '0 0 5px 0', color: '#f59e0b', fontSize: '18px'}}>{'★'.repeat(rev.rating)}{'☆'.repeat(5-rev.rating)}</p>
+                            <p style={{margin: 0, fontSize: '12px', color: '#9ca3af'}}>{rev.date}</p>
+                         </div>
+                      </div>
+                      {rev.text && <p style={{margin: '10px 0 0 0', padding: '12px', background: '#f9fafb', borderRadius: '8px', fontSize: '14px', color: '#4b5563'}}>{rev.text}</p>}
+                   </div>
+                 ))
+               }
             </div>
           )}
         </>
@@ -539,11 +684,18 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </header>
           
           <div style={{ display: 'flex', gap: '10px', padding: '20px', justifyContent: 'flex-start', overflowX: 'auto', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-            <button onClick={() => setCashierTab('orders')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'orders' ? '#10b981' : '#f3f4f6', color: cashierTab === 'orders' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🔔 Оплаты столов</button>
+            <button onClick={() => setCashierTab('orders')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'orders' ? '#10b981' : '#f3f4f6', color: cashierTab === 'orders' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🔔 Заказы и Бронь</button>
             <button onClick={() => setCashierTab('pos')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'pos' ? '#3b82f6' : '#f3f4f6', color: cashierTab === 'pos' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🛒 Терминал кассы</button>
+            <button onClick={() => setCashierTab('chats')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'chats' ? '#ef4444' : '#f3f4f6', color: cashierTab === 'chats' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', position: 'relative' }}>
+               Чаты 💬
+               {chats.filter(c => c.to === 'cafe' && !c.isRead).length > 0 && <span style={{position: 'absolute', top: '-5px', right: '-5px', background: '#111827', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px'}}>{chats.filter(c => c.to === 'cafe' && !c.isRead).length}</span>}
+            </button>
             <button onClick={() => setCashierTab('stories')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'stories' ? '#f59e0b' : '#f3f4f6', color: cashierTab === 'stories' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📸 Сторисы</button>
             <button onClick={() => setCashierTab('report')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'report' ? '#8b5cf6' : '#f3f4f6', color: cashierTab === 'report' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 Отчет смены</button>
           </div>
+
+          {/* ЧАТЫ КАССИРА */}
+          {cashierTab === 'chats' && renderChatsInterface()}
 
           {cashierTab === 'orders' && (
             <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
@@ -591,25 +743,26 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             </div>
           )}
 
+          {/* ИСПРАВЛЕННЫЙ ТЕРМИНАЛ КАССИРА (ЖЕСТКАЯ ВЫСОТА) */}
           {cashierTab === 'pos' && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)' }}>
-              <div style={{ padding: '15px', background: '#fff', display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: '160px', bottom: 0, left: 0, right: 0, background: '#f9fafb' }}>
+              <div style={{ padding: '15px', background: '#fff', display: 'flex', gap: '10px', flexShrink: 0 }}>
                  <button onClick={() => setCashierOrderType('takeaway')} style={{flex:1, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', background: cashierOrderType === 'takeaway' ? '#111827' : '#fff', color: cashierOrderType === 'takeaway' ? '#fff' : '#111827', fontWeight: 'bold', cursor: 'pointer'}}>🛍 Навынос</button>
                  <button onClick={() => setCashierOrderType('delivery')} style={{flex:1, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', background: cashierOrderType === 'delivery' ? '#111827' : '#fff', color: cashierOrderType === 'delivery' ? '#fff' : '#111827', fontWeight: 'bold', cursor: 'pointer'}}>🛵 Доставка</button>
               </div>
               <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
                 {(menu || []).map(item => (
-                  <div key={item.id} style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
-                     <div style={{ flex: 1 }}><p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p><p style={{margin: '2px 0 0 0', color: '#6b7280', fontSize: '13px'}}>{item.price} ₸</p></div>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                       <button onClick={() => setCashierCart(prev => { const updated = { ...prev }; if (!updated[item.id]) return prev; if (updated[item.id].quantity === 1) delete updated[item.id]; else updated[item.id].quantity -= 1; return updated; })} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827', cursor: 'pointer' }}>-</button>
+                  <div key={item.id} style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '12px', marginBottom: '10px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
+                     <div style={{ minWidth: 0, overflow: 'hidden' }}><p style={{margin: 0, fontWeight: 'bold', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{item.name}</p><p style={{margin: '2px 0 0 0', color: '#6b7280', fontSize: '13px'}}>{item.price} ₸</p></div>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                       <button onClick={() => setCashierCart(prev => { const updated = { ...prev }; if (!updated[item.id]) return prev; if (updated[item.id].quantity === 1) delete updated[item.id]; else updated[item.id].quantity -= 1; return updated; })} style={{ width: '36px', height: '36px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827', cursor: 'pointer', fontWeight: 'bold' }}>-</button>
                        <span style={{fontWeight: 'bold', color: '#111827'}}>{(cashierCart || {})[item.id]?.quantity || 0}</span>
-                       <button disabled={item.isStop} onClick={() => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }))} style={{ padding: '6px 12px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', cursor: 'pointer' }}>+</button>
+                       <button disabled={item.isStop} onClick={() => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }))} style={{ width: '36px', height: '36px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', cursor: 'pointer', border: 'none', fontWeight: 'bold' }}>+</button>
                      </div>
                   </div>
                 ))}
               </div>
-              <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '2px solid #e5e7eb' }}>
+              <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '2px solid #e5e7eb', flexShrink: 0, paddingBottom: '30px' }}>
                  <p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '22px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого:</span> <span>{Object.values(cashierCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0)} ₸</span></p>
                  <div style={{display: 'flex', gap: '10px'}}>
                     <button onClick={() => submitCashierOrder('kaspi')} style={{ flex: 1, padding: '16px', borderRadius: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Оплата Kaspi</button>
@@ -620,33 +773,44 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           )}
 
           {cashierTab === 'stories' && (
-            <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
                  <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить Сториc (до 24ч)</h4>
                  <label style={{ cursor: 'pointer', padding: '14px', borderRadius: '10px', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}>
-                    📷 Выбрать Фото или Видео
+                    📷 Выбрать Фото или Видео (до 15 МБ)
                     <input type="file" accept="image/*,video/*" style={{display: 'none'}} onChange={handleStoryUpload} />
                  </label>
               </div>
               <h3 style={{color: '#111827', marginBottom: '15px'}}>Архив историй:</h3>
               <div style={{ display: 'grid', gap: '15px' }}>
-                {(storiesDb || []).map(s => (
-                  <div key={s.id} style={{ background: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', opacity: s.isActive ? 1 : 0.5 }}>
-                    {s.type === 'video' ? <video src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} muted /> : <img src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} alt="" />}
-                    <div style={{flex: 1}}>
-                      <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title.ru || s.title}</p>
-                      <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 12px', borderRadius: '8px', border: 'none', background: s.isActive ? '#fee2e2' : '#d1fae5', color: s.isActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer'}}>
-                         {s.isActive ? 'Скрыть у гостей' : 'Показать гостям'}
-                      </button>
+                {(storiesDb || []).length === 0 ? <p style={{color: '#6b7280'}}>Сторисов пока нет.</p> : (storiesDb || []).map(s => {
+                  const isExpired = (Date.now() - (s.timestamp || 0)) > 24 * 60 * 60 * 1000;
+                  const isReallyActive = s.isActive && !isExpired;
+
+                  return (
+                    <div key={s.id} style={{ background: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', opacity: isReallyActive ? 1 : 0.5 }}>
+                      {s.type === 'video' ? <video src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} muted /> : <img src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} alt="" />}
+                      <div style={{flex: 1}}>
+                        <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title.ru || s.title}</p>
+                        <p style={{margin: '0 0 5px 0', fontSize: '11px', color: '#6b7280'}}>Загружено: {new Date(s.timestamp).toLocaleDateString('ru-RU')}</p>
+                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: '#ea580c'}}>👁 Просмотров: {s.viewedBy ? s.viewedBy.length : 0}</p>
+                        
+                        <div style={{display: 'flex', gap: '5px'}}>
+                          <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive, timestamp: !st.isActive ? Date.now() : st.timestamp} : st))} style={{padding: '6px 10px', borderRadius: '8px', border: 'none', background: isReallyActive ? '#fee2e2' : '#d1fae5', color: isReallyActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px'}}>
+                             {isReallyActive ? 'Скрыть' : 'Опубликовать заново'}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
 
           {cashierTab === 'report' && (
             <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+              
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <h3 style={{color: '#111827', margin: 0}}>Смена:</h3>
                 <select value={reportDate} onChange={e => setReportDate(e.target.value)} style={{ padding: '10px', borderRadius: '10px', border: '2px solid #111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
@@ -690,10 +854,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       )}
 
       {/* ==========================================
-          ЭКРАН 3: ОФИЦИАНТ
+          ЭКРАН 3: ОФИЦИАНТ (СТАБИЛИЗИРОВАННЫЙ ЭКРАН)
       ========================================== */}
       {currentUser.role === 'waiter' && (
-        <>
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflowX: 'hidden' }}>
           {showPosModal && renderWaiterPosModal()}
           {notifyBanner}
           <header style={{ backgroundColor: '#10b981', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -701,7 +865,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <HeaderControls />
           </header>
 
-          <div style={{padding: '20px', maxWidth: '600px', margin: '0 auto'}}>
+          <div style={{padding: '20px', maxWidth: '600px', margin: '0 auto', width: '100%', boxSizing: 'border-box'}}>
             
             <h3 style={{color: '#065f46', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px'}}>🛎 Мои активные столы</h3>
             {tables.filter(t => t.servedBy === currentUser.phone).length === 0 ? <p style={{color: '#6b7280', marginBottom: '30px'}}>У вас пока нет активных столов.</p> : (
@@ -729,38 +893,38 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               ))}
             </div>
             
-            <button onClick={() => setShowWaiterMenu(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', background: '#fff', color: '#10b981', fontWeight: '900', border: '2px solid #10b981', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontSize: '16px', marginTop: '20px' }}>📖 Посмотреть Меню</button>
+            <button onClick={() => setShowWaiterMenu(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', background: '#fff', color: '#10b981', fontWeight: '900', border: '2px solid #10b981', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontSize: '16px', marginTop: '30px' }}>📖 Посмотреть Меню</button>
 
           </div>
 
-          {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА */}
+          {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА (КРАСИВО ПОВЕРХ) */}
           {showWaiterMenu && (
-             <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column' }}>
+             <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', width: '100vw' }}>
                <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                  <h2 style={{margin: 0, fontSize: '18px'}}>📖 Меню заведения</h2><button onClick={() => setShowWaiterMenu(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
                </div>
                <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
                  {(menu || []).map(item => (
                    <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.6 : 1 }}>
-                     <div style={{flex: 1}}>
+                     <div style={{flex: 1, minWidth: 0}}>
                        <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                          {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover'}} alt="" /> : <span style={{fontSize:'24px'}}>{item.img}</span>}
-                          <div>
-                            <p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p>
+                          {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover', flexShrink: 0}} alt="" /> : <span style={{fontSize:'24px'}}>{item.img}</span>}
+                          <div style={{minWidth: 0, overflow: 'hidden'}}>
+                            <p style={{margin: 0, fontWeight: 'bold', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{item.name}</p>
                             <p style={{margin: '2px 0 0 0', fontSize: '14px', color: '#ea580c', fontWeight: 'bold'}}>{item.price} ₸</p>
                           </div>
                        </div>
-                       <p style={{margin: '8px 0 0 0', fontSize: '12px', color: '#6b7280'}}>{item.ingredients}</p>
+                       <p style={{margin: '8px 0 0 0', fontSize: '12px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis'}}>{item.ingredients}</p>
                      </div>
                      {currentUser.isSenior && (
-                        <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', marginLeft: '10px' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+                        <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', marginLeft: '10px', flexShrink: 0 }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
                      )}
                    </div>
                  ))}
                </div>
              </div>
           )}
-        </>
+        </div>
       )}
 
       {/* ==========================================
@@ -776,9 +940,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <h3 style={{color: '#111827'}}>Управление стоп-листом и Фото:</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
               {(menu || []).map(item => (
-                <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', display: 'grid', gridTemplateColumns: '50px 1fr auto auto', gap: '15px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
+                <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', display: 'grid', gridTemplateColumns: '50px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
                   <div style={{fontSize: '30px', textAlign: 'center'}}>{item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}</div>
-                  <div><p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827' }}>{item.name}</p>{item.isStop && <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#dc2626' }}>Стоп: {item.stopReason}</p>}</div>
+                  <div style={{minWidth: 0, overflow: 'hidden'}}>
+                     <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
+                     {item.isStop && <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#dc2626', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Стоп: {item.stopReason}</p>}
+                  </div>
                   <label style={{ cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', textAlign: 'center' }}>
                     📷 Фото
                     <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => handlePhotoUpload(e, item.id)} />

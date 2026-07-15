@@ -8,6 +8,8 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
   const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
+  
+  // Базы клиентов и отзывов только для чтения (нужны Директору)
   const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); 
   const [reviews] = useLocalStorage('amina_reviews_v11', []);
 
@@ -16,13 +18,16 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const [selectedTableGroup, setSelectedTableGroup] = useState('all');
   const [staffFilter, setStaffFilter] = useState('all'); 
   
+  // Чаты:
   const [activeChatPhone, setActiveChatPhone] = useState(null);
   const [replyText, setReplyText] = useState('');
 
+  // Словарь
   const t = {
     logout: lang === 'ru' ? 'Выйти' : 'Шығу'
   };
 
+  // ФИЛЬТРЫ ДЛЯ ПЕРСОНАЛА
   const STAFF_FILTERS = [
     { id: 'all', name: 'Все' }, 
     { id: 'waiter', name: 'Официанты' }, 
@@ -40,6 +45,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
     return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
   };
   
+  // УМНАЯ КАССА (Смены)
   const now = new Date();
   const currentShiftDate = new Date(now);
   if (now.getHours() < 6) {
@@ -51,6 +57,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const allDates = [...new Set((orders || []).map(o => o.fullDate))].sort().reverse();
   if (!allDates.includes(todayDateStr)) allDates.unshift(todayDateStr);
 
+  // === АВТО-СНЯТИЕ БРОНИ (ЧЕРЕЗ 30 МИНУТ) ===
   useEffect(() => {
     const interval = setInterval(() => {
       const currentTime = new Date();
@@ -77,6 +84,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
     return () => clearInterval(interval);
   }, [tables, setTables]);
 
+  // СИРЕНА ДЛЯ ПЕРСОНАЛА
   const callingTables = (tables || []).filter(tab => tab.isCalling || tab.isCallingForBill);
   const notifyBanner = callingTables.length > 0 ? (
     <div style={{ background: '#ef4444', color: '#fff', padding: '15px', textAlign: 'center', fontWeight: '900', fontSize: '16px', position: 'sticky', top: 0, zIndex: 9999, boxShadow: '0 4px 10px rgba(239,68,68,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -85,10 +93,13 @@ export default function StaffApp({ currentUser, logout, lang }) {
     </div>
   ) : null;
 
+  // ФИНАНСОВЫЕ РАСЧЕТЫ ПО СМЕНЕ
   const validOrders = (orders || []).filter(o => o.status !== 'rejected' && o.status !== 'transfer_pending' && o.status !== 'waiter_pending' && o.fullDate === reportDate);
   const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
   const kaspiRevenue = validOrders.filter(o => o.payMethod === 'kaspi').reduce((sum, o) => sum + o.total, 0);
   const cashRevenue = validOrders.filter(o => o.payMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
+  const cardRevenue = validOrders.filter(o => o.payMethod === 'card').reduce((sum, o) => sum + o.total, 0);
+  const appleRevenue = validOrders.filter(o => o.payMethod === 'apple_pay').reduce((sum, o) => sum + o.total, 0);
 
   const HeaderControls = () => (
     <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
@@ -96,21 +107,25 @@ export default function StaffApp({ currentUser, logout, lang }) {
     </div>
   );
 
+  // --- СОСТОЯНИЯ АДМИНА И ПЕРСОНАЛА ---
   const [newItem, setNewItem] = useState({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' });
   const [editStaffModal, setEditStaffModal] = useState(false);
   const [editStaffOriginalPhone, setEditStaffOriginalPhone] = useState('');
   const [editStaffData, setEditStaffData] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', station: 'hot', isSenior: false, onShift: true });
   const [newWaiter, setNewWaiter] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', station: 'hot', isSenior: false });
   
+  // --- СОСТОЯНИЯ ОФИЦИАНТА ---
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
   const [posCart, setPosCart] = useState({});
   const [showWaiterMenu, setShowWaiterMenu] = useState(false);
 
+  // --- СОСТОЯНИЯ КАССИРА ---
   const [cashierTab, setCashierTab] = useState('orders'); 
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
+  // ФУНКЦИИ ЧАТА (Техподдержка)
   const sendAdminReply = (e) => {
     e.preventDefault();
     if(!replyText.trim() || !activeChatPhone) return;
@@ -129,7 +144,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
           {chatUsers.length === 0 ? <p style={{color: '#6b7280', textAlign: 'center', marginTop: '30px'}}>Сообщений пока нет.</p> :
             chatUsers.map(phone => {
                const lastMsg = (chats || []).filter(c => c.from === phone || c.to === phone).pop();
-               const guestName = (customers || {})[phone]?.name || (roles || {})[phone]?.name || phone;
+               const guestName = (customers && customers[phone]?.name) || (roles && roles[phone]?.name) || phone;
                const unreadCount = (chats || []).filter(c => c.from === phone && !c.isRead).length;
                return (
                  <div key={phone} onClick={() => {
@@ -152,7 +167,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
       );
     } else {
        const guestMsgs = (chats || []).filter(c => c.from === activeChatPhone || c.to === activeChatPhone);
-       const guestName = (customers || {})[activeChatPhone]?.name || activeChatPhone;
+       const guestName = (customers && customers[activeChatPhone]?.name) || activeChatPhone;
        return (
          <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxWidth: '800px', margin: '0 auto', background: '#fff', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
            <div style={{ padding: '15px', background: '#111827', color: '#fff', display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -387,6 +402,8 @@ export default function StaffApp({ currentUser, logout, lang }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Kaspi</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{kaspiRevenue} ₸</p></div>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Наличные</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cashRevenue} ₸</p></div>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Карта</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cardRevenue} ₸</p></div>
+                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Apple Pay</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{appleRevenue} ₸</p></div>
               </div>
 
               <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 История закрытых заказов (Смена {reportDate}):</h3>
@@ -402,7 +419,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                      </div>
                      <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'}</span>
+                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
                         <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
                         <span>{o.date}</span>
                      </div>
@@ -701,7 +718,6 @@ export default function StaffApp({ currentUser, logout, lang }) {
                                <button onClick={() => changeOrderStatus(o.id, 'new', 'kaspi')} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                                <button onClick={() => {
                                  changeOrderStatus(o.id, 'rejected');
-                                 // Если отклонили задаток - снимаем бронь
                                  if (o.tableName.includes("Задаток")) {
                                     setTables(prev => prev.map(t => t.id === o.tableId ? {...t, status: 'free', bookedBy: null, bookedTime: null} : t));
                                  }
@@ -841,7 +857,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
       )}
 
       {/* ==========================================
-          ЭКРАН 3: ОФИЦИАНТ
+          ЭКРАН 3: ОФИЦИАНТ (СТАБИЛИЗИРОВАННЫЙ ЭКРАН)
       ========================================== */}
       {currentUser.role === 'waiter' && (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflowX: 'hidden' }}>

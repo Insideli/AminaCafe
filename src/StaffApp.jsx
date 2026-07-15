@@ -8,6 +8,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
   const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
+  
   const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); 
   const [reviews] = useLocalStorage('amina_reviews_v11', []);
 
@@ -51,6 +52,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const allDates = [...new Set((orders || []).map(o => o.fullDate))].sort().reverse();
   if (!allDates.includes(todayDateStr)) allDates.unshift(todayDateStr);
 
+  // === АВТО-СНЯТИЕ БРОНИ (ЧЕРЕЗ 30 МИНУТ) ===
   useEffect(() => {
     const interval = setInterval(() => {
       setTables(prev => {
@@ -276,7 +278,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
     const currentTotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     if (currentTotal <= 0) return;
     const discountAmount = Math.round(currentTotal * 0.1);
-    setPosCart(prev => ({ ...prev, 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
+    setPosCart(prev => ({ ...(prev || {}), 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
   };
 
   const submitPosOrder = () => {
@@ -871,7 +873,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
       )}
 
       {/* ==========================================
-          ЭКРАН 3: ОФИЦИАНТ
+          ЭКРАН 3: ОФИЦИАНТ (СТАБИЛИЗИРОВАННЫЙ ЭКРАН)
       ========================================== */}
       {currentUser.role === 'waiter' && (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflowX: 'hidden' }}>

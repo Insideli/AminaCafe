@@ -303,9 +303,13 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <div style={{ display: 'grid', gap: '15px' }}>
               {(storiesDb || []).map(s => (
                 <div key={s.id} style={{ background: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', opacity: s.isActive ? 1 : 0.5 }}>
-                  <img src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} alt="" />
+                  {s.type === 'video' ? (
+                     <video src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} muted />
+                  ) : (
+                     <img src={s.imgUrl} style={{width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover'}} alt="" />
+                  )}
                   <div style={{flex: 1}}>
-                    <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title}</p>
+                    <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{s.title.ru || s.title}</p>
                     <button onClick={() => setStoriesDb(prev => prev.map(st => st.id === s.id ? {...st, isActive: !st.isActive} : st))} style={{padding: '6px 12px', borderRadius: '8px', border: 'none', background: s.isActive ? '#fee2e2' : '#d1fae5', color: s.isActive ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer'}}>
                        {s.isActive ? 'Скрыть у гостей' : 'Показать гостям'}
                     </button>
@@ -316,17 +320,17 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* УПРАВЛЕНИЕ МЕНЮ */}
+        {/* УПРАВЛЕНИЕ МЕНЮ (С АДАПТИВНЫМИ ИНПУТАМИ) */}
         {adminTab === 'menu' && (
           <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
               <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить блюдо:</h4>
-              <input type="text" placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-              <div style={{display: 'flex', gap: '10px'}}>
-                 <input type="number" placeholder="Цена" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                 <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>{CATEGORIES.filter(c=>c.id!=='all').map(c=>(<option key={c.id} value={c.id}>{c.name}</option>))}</select>
+              <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                 <input type="text" placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                 <input type="number" placeholder="Цена" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '120px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                 <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '120px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>{CATEGORIES.filter(c=>c.id!=='all').map(c=>(<option key={c.id} value={c.id}>{c.name}</option>))}</select>
               </div>
-              <button onClick={handleAddMenuItem} style={{ width: '100%', padding: '14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Опубликовать</button>
+              <button onClick={handleAddMenuItem} style={{ width: '100%', padding: '14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '5px', fontWeight: 'bold', cursor: 'pointer' }}>Опубликовать</button>
             </div>
 
             <h3 style={{color: '#111827', marginBottom: '15px'}}>Управление меню:</h3>
@@ -354,7 +358,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* УПРАВЛЕНИЕ ПЕРСОНАЛОМ */}
+        {/* УПРАВЛЕНИЕ ПЕРСОНАЛОМ (С АДАПТИВНЫМИ ИНПУТАМИ) */}
         {adminTab === 'staff' && (
           <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
             {editStaffModal && (
@@ -366,17 +370,17 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Имя Фамилия</label><input type="text" value={editStaffData.name} onChange={e => setEditStaffData({...editStaffData, name: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box'}} /></div>
                     <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Логин (Номер телефона)</label><input type="text" value={editStaffData.phone} onChange={e => setEditStaffData({...editStaffData, phone: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box'}} /></div>
                     <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Пароль</label><input type="text" value={editStaffData.password} onChange={e => setEditStaffData({...editStaffData, password: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box'}} /></div>
-                    <div style={{display: 'flex', gap: '10px'}}>
-                      <div style={{flex: 1}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Должность</label><select value={editStaffData.role} onChange={e => setEditStaffData({...editStaffData, role: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select></div>
+                    <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px'}}>
+                      <div style={{flex: '1 1 calc(50% - 5px)', minWidth: '120px'}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Должность</label><select value={editStaffData.role} onChange={e => setEditStaffData({...editStaffData, role: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select></div>
                       {editStaffData.role === 'cook' && (
-                        <div style={{flex: 1}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Цех</label><select value={editStaffData.station} onChange={e => setEditStaffData({...editStaffData, station: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="hot">Горячий</option><option value="cold">Холодный</option><option value="bar">Бар</option><option value="mangal">Мангал</option></select></div>
+                        <div style={{flex: '1 1 calc(50% - 5px)', minWidth: '120px'}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Цех</label><select value={editStaffData.station} onChange={e => setEditStaffData({...editStaffData, station: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="hot">Горячий</option><option value="cold">Холодный</option><option value="bar">Бар</option><option value="mangal">Мангал</option></select></div>
                       )}
                     </div>
                     <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>График работы</label><input type="text" value={editStaffData.schedule} onChange={e => setEditStaffData({...editStaffData, schedule: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
                     {editStaffData.role === 'waiter' && (
                       <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
                         <input type="checkbox" checked={editStaffData.isSenior} onChange={e => setEditStaffData({...editStaffData, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
-                        👑 Назначить Старшим официантом
+                        👑 Назначить Старшим
                       </label>
                     )}
                     <button onClick={handleSaveStaff} style={{ width: '100%', padding: '16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '12px', marginTop: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>Сохранить изменения</button>
@@ -387,20 +391,22 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
               <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Новый сотрудник:</h4>
-              <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-              <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
-                 <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
-                 <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+              <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                 <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                 <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+                 <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
               </div>
-              <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
-                <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select>
+              
+              <div style={{display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select>
                 {newWaiter.role === 'cook' && (
-                   <select value={newWaiter.station} onChange={e => setNewWaiter({...newWaiter, station: e.target.value})} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+                   <select value={newWaiter.station} onChange={e => setNewWaiter({...newWaiter, station: e.target.value})} style={{ flex: '1 1 calc(50% - 5px)', minWidth: '130px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
                      <option value="hot">Горячий цех</option><option value="cold">Холодный цех</option><option value="bar">Бар</option><option value="mangal">Мангал</option>
                    </select>
                 )}
+                <input type="text" placeholder="График (напр. 2/2)" value={newWaiter.schedule} onChange={e => setNewWaiter({...newWaiter, schedule: e.target.value})} style={{ flex: '1 1 100%', minWidth: '200px', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
               </div>
-              <input type="text" placeholder="График (напр. 2/2 или ПН-ПТ)" value={newWaiter.schedule} onChange={e => setNewWaiter({...newWaiter, schedule: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}/>
+              
               {newWaiter.role === 'waiter' && (
                 <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
                   <input type="checkbox" checked={newWaiter.isSenior} onChange={e => setNewWaiter({...newWaiter, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
@@ -607,15 +613,46 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
         {cashierTab === 'report' && (
           <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-            <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>📊 Финансовый отчет смены</h2>
-            <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '20px', border: '1px solid #e5e7eb', textAlign: 'center' }}>
-               <p style={{margin: '0 0 10px 0', color: '#6b7280', fontWeight: 'bold'}}>Выручка за сегодня ({todayDateStr})</p>
-               <h1 style={{ color: '#10b981', fontSize: '40px', margin: '0 0 20px 0' }}>{totalRevenue} ₸</h1>
-               <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f3f4f6', paddingTop: '15px'}}>
-                  <div><p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>Kaspi / Карта / Apple</p><p style={{margin: '5px 0 0 0', color: '#111827', fontWeight: 'bold', fontSize: '18px'}}>{kaspiRevenue + cardRevenue + appleRevenue} ₸</p></div>
-                  <div style={{textAlign: 'right'}}><p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>Наличные (В ящике)</p><p style={{margin: '5px 0 0 0', color: '#111827', fontWeight: 'bold', fontSize: '18px'}}>{cashRevenue} ₸</p></div>
-               </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h3 style={{color: '#111827', margin: 0}}>Смена:</h3>
+              <select value={reportDate} onChange={e => setReportDate(e.target.value)} style={{ padding: '10px', borderRadius: '10px', border: '2px solid #111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
+                 {allDates.map(d => <option key={d} value={d}>{d === todayDateStr ? 'Сегодня (' + d + ')' : d}</option>)}
+              </select>
             </div>
+
+            <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '20px', border: '1px solid #e5e7eb', textAlign: 'center', marginBottom: '20px' }}>
+               <p style={{margin: '0 0 10px 0', color: '#6b7280', fontWeight: 'bold'}}>Общая Касса ({reportDate})</p>
+               <h1 style={{ color: '#10b981', fontSize: '40px', margin: '10px 0' }}>{totalRevenue} ₸</h1>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
+              <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Kaspi</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{kaspiRevenue} ₸</p></div>
+              <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Наличные</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cashRevenue} ₸</p></div>
+              <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Карта</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cardRevenue} ₸</p></div>
+              <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Apple Pay</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{appleRevenue} ₸</p></div>
+            </div>
+
+            <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 История закрытых заказов (Смена {reportDate}):</h3>
+            {validOrders.length === 0 ? <p style={{color: '#6b7280'}}>Заказов пока нет.</p> : 
+              validOrders.map(o => (
+                <div key={o.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', padding: '15px', marginBottom: '15px' }}>
+                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+                     <div>
+                       <span style={{fontWeight: '900', color: '#111827'}}>{o.tableName}</span>
+                       <span style={{background: o.orderType === 'in_hall' ? '#f3f4f6' : '#fff7ed', color: o.orderType === 'in_hall' ? '#4b5563' : '#ea580c', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', marginLeft: '10px', fontWeight: 'bold'}}>{o.orderType === 'in_hall' ? 'В зале' : o.orderType === 'delivery' ? 'Доставка' : 'Навынос'}</span>
+                     </div>
+                     <span style={{fontWeight: '900', color: '#10b981', fontSize: '16px'}}>+ {o.total} ₸</span>
+                   </div>
+                   <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
+                   <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
+                      <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
+                      <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
+                      <span>{o.date}</span>
+                   </div>
+                </div>
+              ))
+            }
           </div>
         )}
       </div>
@@ -666,7 +703,38 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             ))}
           </div>
           
+          <button onClick={() => setAdminTab('menu')} style={{ width: '100%', padding: '16px', borderRadius: '14px', background: '#fff', color: '#10b981', fontWeight: '900', border: '2px solid #10b981', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontSize: '16px', marginTop: '20px' }}>📖 Посмотреть Меню</button>
+
         </div>
+
+        {/* Просмотр меню для официанта (без редактирования) */}
+        {adminTab === 'menu' && (
+           <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+             <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <h2 style={{margin: 0, fontSize: '18px'}}>📖 Меню заведения</h2><button onClick={() => setAdminTab('stats')} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
+             </div>
+             <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+               {(menu || []).map(item => (
+                 <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.6 : 1 }}>
+                   <div style={{flex: 1}}>
+                     <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                        {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover'}} alt="" /> : <span style={{fontSize:'24px'}}>{item.img}</span>}
+                        <div>
+                          <p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p>
+                          <p style={{margin: '2px 0 0 0', fontSize: '14px', color: '#ea580c', fontWeight: 'bold'}}>{item.price} ₸</p>
+                        </div>
+                     </div>
+                     <p style={{margin: '8px 0 0 0', fontSize: '12px', color: '#6b7280'}}>{item.ingredients}</p>
+                   </div>
+                   {currentUser.isSenior && (
+                      <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', marginLeft: '10px' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+                   )}
+                 </div>
+               ))}
+             </div>
+           </div>
+        )}
+
       </div>
     );
   }

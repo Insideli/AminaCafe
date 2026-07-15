@@ -7,27 +7,22 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const [orders, setOrders] = useLocalStorage('amina_orders_v11', []);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [storiesDb, setStoriesDb] = useLocalStorage('amina_stories_v11', []);
-  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
-  
-  // Базы клиентов и отзывов только для чтения (нужны Директору)
   const [customers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS); 
   const [reviews] = useLocalStorage('amina_reviews_v11', []);
+  const [chats, setChats] = useLocalStorage('amina_chats_v11', []);
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [reviewFilter, setReviewFilter] = useState('all');
   const [selectedTableGroup, setSelectedTableGroup] = useState('all');
   const [staffFilter, setStaffFilter] = useState('all'); 
   
-  // Чаты:
   const [activeChatPhone, setActiveChatPhone] = useState(null);
   const [replyText, setReplyText] = useState('');
 
-  // Словарь
   const t = {
     logout: lang === 'ru' ? 'Выйти' : 'Шығу'
   };
 
-  // ФИЛЬТРЫ ДЛЯ ПЕРСОНАЛА
   const STAFF_FILTERS = [
     { id: 'all', name: 'Все' }, 
     { id: 'waiter', name: 'Официанты' }, 
@@ -45,7 +40,6 @@ export default function StaffApp({ currentUser, logout, lang }) {
     return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
   };
   
-  // УМНАЯ КАССА (Смены)
   const now = new Date();
   const currentShiftDate = new Date(now);
   if (now.getHours() < 6) {
@@ -57,34 +51,32 @@ export default function StaffApp({ currentUser, logout, lang }) {
   const allDates = [...new Set((orders || []).map(o => o.fullDate))].sort().reverse();
   if (!allDates.includes(todayDateStr)) allDates.unshift(todayDateStr);
 
-  // === АВТО-СНЯТИЕ БРОНИ (ЧЕРЕЗ 30 МИНУТ) ===
   useEffect(() => {
     const interval = setInterval(() => {
-      const currentTime = new Date();
-      let tablesUpdated = false;
-      
-      const newTables = (tables || []).map(tab => {
-        if (tab.status === 'booked' && tab.bookedTime) {
-          const [bookH, bookM] = tab.bookedTime.split(':').map(Number);
-          const bookDate = new Date();
-          bookDate.setHours(bookH, bookM, 0, 0);
-          
-          const diffMins = (currentTime - bookDate) / (1000 * 60);
-          
-          if (diffMins > 30) {
-            tablesUpdated = true;
-            return { ...tab, status: 'free', bookedBy: null, bookedTime: null, servedBy: null };
+      setTables(prev => {
+        const currentTime = new Date();
+        let tablesUpdated = false;
+        const newTables = (prev || []).map(tab => {
+          if (tab.status === 'booked' && tab.bookedTime) {
+            const [bookH, bookM] = tab.bookedTime.split(':').map(Number);
+            const bookDate = new Date();
+            bookDate.setHours(bookH, bookM, 0, 0);
+            
+            const diffMins = (currentTime - bookDate) / (1000 * 60);
+            
+            if (diffMins > 30) {
+              tablesUpdated = true;
+              return { ...tab, status: 'free', bookedBy: null, bookedTime: null, servedBy: null };
+            }
           }
-        }
-        return tab;
+          return tab;
+        });
+        return tablesUpdated ? newTables : prev;
       });
-
-      if (tablesUpdated) setTables(newTables);
     }, 60000); 
     return () => clearInterval(interval);
-  }, [tables, setTables]);
+  }, [setTables]);
 
-  // СИРЕНА ДЛЯ ПЕРСОНАЛА
   const callingTables = (tables || []).filter(tab => tab.isCalling || tab.isCallingForBill);
   const notifyBanner = callingTables.length > 0 ? (
     <div style={{ background: '#ef4444', color: '#fff', padding: '15px', textAlign: 'center', fontWeight: '900', fontSize: '16px', position: 'sticky', top: 0, zIndex: 9999, boxShadow: '0 4px 10px rgba(239,68,68,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -93,13 +85,10 @@ export default function StaffApp({ currentUser, logout, lang }) {
     </div>
   ) : null;
 
-  // ФИНАНСОВЫЕ РАСЧЕТЫ ПО СМЕНЕ
   const validOrders = (orders || []).filter(o => o.status !== 'rejected' && o.status !== 'transfer_pending' && o.status !== 'waiter_pending' && o.fullDate === reportDate);
   const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
   const kaspiRevenue = validOrders.filter(o => o.payMethod === 'kaspi').reduce((sum, o) => sum + o.total, 0);
   const cashRevenue = validOrders.filter(o => o.payMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
-  const cardRevenue = validOrders.filter(o => o.payMethod === 'card').reduce((sum, o) => sum + o.total, 0);
-  const appleRevenue = validOrders.filter(o => o.payMethod === 'apple_pay').reduce((sum, o) => sum + o.total, 0);
 
   const HeaderControls = () => (
     <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
@@ -107,25 +96,21 @@ export default function StaffApp({ currentUser, logout, lang }) {
     </div>
   );
 
-  // --- СОСТОЯНИЯ АДМИНА И ПЕРСОНАЛА ---
   const [newItem, setNewItem] = useState({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' });
   const [editStaffModal, setEditStaffModal] = useState(false);
   const [editStaffOriginalPhone, setEditStaffOriginalPhone] = useState('');
   const [editStaffData, setEditStaffData] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', station: 'hot', isSenior: false, onShift: true });
   const [newWaiter, setNewWaiter] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', station: 'hot', isSenior: false });
   
-  // --- СОСТОЯНИЯ ОФИЦИАНТА ---
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
   const [posCart, setPosCart] = useState({});
   const [showWaiterMenu, setShowWaiterMenu] = useState(false);
 
-  // --- СОСТОЯНИЯ КАССИРА ---
   const [cashierTab, setCashierTab] = useState('orders'); 
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
-  // ФУНКЦИИ ЧАТА (Техподдержка)
   const sendAdminReply = (e) => {
     e.preventDefault();
     if(!replyText.trim() || !activeChatPhone) return;
@@ -144,7 +129,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
           {chatUsers.length === 0 ? <p style={{color: '#6b7280', textAlign: 'center', marginTop: '30px'}}>Сообщений пока нет.</p> :
             chatUsers.map(phone => {
                const lastMsg = (chats || []).filter(c => c.from === phone || c.to === phone).pop();
-               const guestName = (customers && customers[phone]?.name) || (roles && roles[phone]?.name) || phone;
+               const guestName = (customers || {})[phone]?.name || (roles || {})[phone]?.name || phone;
                const unreadCount = (chats || []).filter(c => c.from === phone && !c.isRead).length;
                return (
                  <div key={phone} onClick={() => {
@@ -167,7 +152,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
       );
     } else {
        const guestMsgs = (chats || []).filter(c => c.from === activeChatPhone || c.to === activeChatPhone);
-       const guestName = (customers && customers[activeChatPhone]?.name) || activeChatPhone;
+       const guestName = (customers || {})[activeChatPhone]?.name || activeChatPhone;
        return (
          <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxWidth: '800px', margin: '0 auto', background: '#fff', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
            <div style={{ padding: '15px', background: '#111827', color: '#fff', display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -298,6 +283,8 @@ export default function StaffApp({ currentUser, logout, lang }) {
     const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     
+    console.log("SENDING TO PALOMA365 (KITCHEN PRINTER):", { table: table?.name, items: text, total });
+
     const newOrder = { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, 
       tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, 
@@ -334,8 +321,8 @@ export default function StaffApp({ currentUser, logout, lang }) {
     );
   };
 
-  const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }));
-  const removeFromCashierCart = (id) => { setCashierCart(prev => { const updated = { ...prev }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; }); };
+  const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: ((prev || {})[item.id]?.quantity || 0) + 1 } }));
+  const removeFromCashierCart = (id) => { setCashierCart(prev => { const updated = { ...(prev || {}) }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; }); };
   
   const submitCashierOrder = (payMethod) => {
     const cartArray = Object.values(cashierCart || {}); 
@@ -402,8 +389,6 @@ export default function StaffApp({ currentUser, logout, lang }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Kaspi</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{kaspiRevenue} ₸</p></div>
                 <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Наличные</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cashRevenue} ₸</p></div>
-                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Карта</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{cardRevenue} ₸</p></div>
-                <div style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', border: '1px solid #e5e7eb', textAlign: 'center' }}><p style={{margin: '0 0 5px 0', color: '#6b7280', fontSize: '13px'}}>Apple Pay</p><p style={{margin: 0, fontSize: '18px', fontWeight: '900', color: '#111827'}}>{appleRevenue} ₸</p></div>
               </div>
 
               <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 История закрытых заказов (Смена {reportDate}):</h3>
@@ -419,7 +404,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                      </div>
                      <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : o.payMethod === 'card' ? 'Карта' : o.payMethod === 'apple_pay' ? 'Apple Pay' : 'Наличные'}</span>
+                        <span>Метод: {o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'}</span>
                         <span>Обслужил: {o.waiterName || 'Сайт/Онлайн'}</span>
                         <span>{o.date}</span>
                      </div>
@@ -718,6 +703,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
                                <button onClick={() => changeOrderStatus(o.id, 'new', 'kaspi')} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                                <button onClick={() => {
                                  changeOrderStatus(o.id, 'rejected');
+                                 // Если отклонили задаток - снимаем бронь
                                  if (o.tableName.includes("Задаток")) {
                                     setTables(prev => prev.map(t => t.id === o.tableId ? {...t, status: 'free', bookedBy: null, bookedTime: null} : t));
                                  }
@@ -746,7 +732,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
             </div>
           )}
 
-          {/* ТЕРМИНАЛ КАССИРА */}
+          {/* ИСПРАВЛЕННЫЙ ТЕРМИНАЛ КАССИРА (ЖЕСТКАЯ ВЫСОТА) */}
           {cashierTab === 'pos' && (
             <div style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: '160px', bottom: 0, left: 0, right: 0, background: '#f9fafb' }}>
               <div style={{ padding: '15px', background: '#fff', display: 'flex', gap: '10px', flexShrink: 0 }}>
@@ -768,8 +754,22 @@ export default function StaffApp({ currentUser, logout, lang }) {
               <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '2px solid #e5e7eb', flexShrink: 0, paddingBottom: '30px' }}>
                  <p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '22px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого:</span> <span>{Object.values(cashierCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0)} ₸</span></p>
                  <div style={{display: 'flex', gap: '10px'}}>
-                    <button onClick={() => submitCashierOrder('kaspi')} style={{ flex: 1, padding: '16px', borderRadius: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Оплата Kaspi</button>
-                    <button onClick={() => submitCashierOrder('cash')} style={{ flex: 1, padding: '16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Наличными</button>
+                    <button onClick={() => {
+                        const cartArray = Object.values(cashierCart || {}); 
+                        if (cartArray.length === 0) return alert('Выберите блюда!');
+                        const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+                        const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
+                        const newOrder = { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'cashier-' + currentUser.phone, tableId: 'cashier', tableName: cashierOrderType === 'takeaway' ? 'Навынос (Касса)' : 'Доставка (Касса)', cartItems: cartArray, itemsText: text, total: total, tips: 0, isPreOrder: false, bookedTime: null, orderType: cashierOrderType, date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), fullDate: todayDateStr, status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: 'kaspi' };
+                        setOrders(prev => [newOrder, ...(prev || [])]); setCashierCart({}); alert('Заказ оплачен и отправлен на принтер кухни!');
+                    }} style={{ flex: 1, padding: '16px', borderRadius: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Оплата Kaspi</button>
+                    <button onClick={() => {
+                        const cartArray = Object.values(cashierCart || {}); 
+                        if (cartArray.length === 0) return alert('Выберите блюда!');
+                        const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+                        const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
+                        const newOrder = { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'cashier-' + currentUser.phone, tableId: 'cashier', tableName: cashierOrderType === 'takeaway' ? 'Навынос (Касса)' : 'Доставка (Касса)', cartItems: cartArray, itemsText: text, total: total, tips: 0, isPreOrder: false, bookedTime: null, orderType: cashierOrderType, date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), fullDate: todayDateStr, status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: 'cash' };
+                        setOrders(prev => [newOrder, ...(prev || [])]); setCashierCart({}); alert('Заказ оплачен и отправлен на принтер кухни!');
+                    }} style={{ flex: 1, padding: '16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Наличными</button>
                  </div>
               </div>
             </div>
@@ -781,7 +781,21 @@ export default function StaffApp({ currentUser, logout, lang }) {
                  <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить Сториc (до 24ч)</h4>
                  <label style={{ cursor: 'pointer', padding: '14px', borderRadius: '10px', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', textAlign: 'center', display: 'block', width: '100%', boxSizing: 'border-box' }}>
                     📷 Выбрать Фото или Видео (до 15 МБ)
-                    <input type="file" accept="image/*,video/*" style={{display: 'none'}} onChange={handleStoryUpload} />
+                    <input type="file" accept="image/*,video/*" style={{display: 'none'}} onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const isVideo = file.type.startsWith('video/');
+                        if (isVideo && file.size > 15 * 1024 * 1024) return alert("Видео слишком большое! Максимум 15 МБ.");
+                        const reader = new FileReader();
+                        reader.onload = (event) => { 
+                          const title = prompt("Введите название акции/сториса:", "Новинка!");
+                          if (!title) return;
+                          const newStory = { id: Date.now(), title: { ru: title, kz: title }, imgUrl: event.target.result, isActive: true, type: isVideo ? 'video' : 'image', timestamp: Date.now(), viewedBy: [] };
+                          setStoriesDb(prev => [newStory, ...(prev || [])]);
+                          alert("Сториc успешно загружен и виден гостям (на 24 часа)!"); 
+                        };
+                        reader.readAsDataURL(file);
+                    }} />
                  </label>
               </div>
               <h3 style={{color: '#111827', marginBottom: '15px'}}>Архив историй:</h3>
@@ -861,7 +875,45 @@ export default function StaffApp({ currentUser, logout, lang }) {
       ========================================== */}
       {currentUser.role === 'waiter' && (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', overflowX: 'hidden' }}>
-          {showPosModal && renderWaiterPosModal()}
+          {showPosModal && (
+            <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f3f4f6', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+               <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{margin: 0, fontSize: '18px'}}>📱 Касса: {(tables || []).find(t => t.id === posTableId)?.name}</h2><button onClick={() => setShowPosModal(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
+               </div>
+               <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+                  {currentUser.isSenior && <button onClick={() => {
+                      const cartArray = Object.values(posCart || {});
+                      const currentTotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+                      if (currentTotal <= 0) return;
+                      const discountAmount = Math.round(currentTotal * 0.1);
+                      setPosCart(prev => ({ ...prev, 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
+                  }} style={{width: '100%', padding: '10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer'}}>🎁 Применить скидку -10%</button>}
+                  {(menu || []).map(item => (
+                    <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
+                       <div style={{ flex: 1, paddingRight: '10px' }}><div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>{item.imgUrl ? <img src={item.imgUrl} alt="" style={{width: '30px', height: '30px', borderRadius: '8px', objectFit: 'cover'}}/> : <span>{item.img}</span>}<p style={{margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#111827'}}>{item.name}</p></div><p style={{margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px'}}>{item.price} ₸</p></div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}><button onClick={() => { setPosCart(prev => { const updated = { ...(prev || {}) }; if (!updated[item.id]) return prev; if (updated[item.id].quantity === 1) delete updated[item.id]; else updated[item.id].quantity -= 1; return updated; }); }} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827', cursor: 'pointer' }}>-</button><span style={{fontWeight: 'bold', fontSize: '16px', color: '#111827'}}>{(posCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => { setPosCart(prev => ({ ...(prev || {}), [item.id]: { ...item, quantity: ((prev || {})[item.id]?.quantity || 0) + 1 } })); }} style={{ padding: '8px 15px', borderRadius: '10px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', cursor: 'pointer' }}>+</button></div>
+                    </div>
+                  ))}
+               </div>
+               <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb' }}><p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '20px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого:</span> <span>{Object.values(posCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0)} ₸</span></p><button onClick={() => {
+                    const cartArray = Object.values(posCart || {}); if (cartArray.length === 0) return alert("Корзина пуста");
+                    const table = (tables || []).find(t => t.id === posTableId); 
+                    const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+                    const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
+                    
+                    const newOrder = { 
+                      id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, 
+                      tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, 
+                      total: total, tips: 0, isPreOrder: false, bookedTime: null, orderType: 'in_hall', 
+                      date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
+                      fullDate: todayDateStr, status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: 'cash' 
+                    }; 
+                    setOrders(prev => [newOrder, ...(prev || [])]); 
+                    setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy || 'Гость', servedBy: currentUser.phone, isCalling: false } : t));
+                    setShowPosModal(false); setPosCart({}); alert('Заказ отправлен на принтер кухни!');
+               }} style={{ width: '100%', padding: '18px', borderRadius: '14px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>Отправить на кухню</button></div>
+            </div>
+          )}
           {notifyBanner}
           <header style={{ backgroundColor: '#10b981', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{margin: 0}}>{currentUser.isSenior ? '👑' : '🏃‍♂️'} {currentUser.name}</h2>
@@ -900,7 +952,7 @@ export default function StaffApp({ currentUser, logout, lang }) {
 
           </div>
 
-          {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА */}
+          {/* ВСПЛЫВАЮЩЕЕ МЕНЮ ДЛЯ ОФИЦИАНТА (КРАСИВО ПОВЕРХ) */}
           {showWaiterMenu && (
              <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', width: '100vw' }}>
                <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -920,7 +972,10 @@ export default function StaffApp({ currentUser, logout, lang }) {
                        <p style={{margin: '8px 0 0 0', fontSize: '12px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis'}}>{item.ingredients}</p>
                      </div>
                      {currentUser.isSenior && (
-                        <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', marginLeft: '10px', flexShrink: 0 }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+                        <button onClick={() => {
+                            if (item.isStop) { setMenu(prev => (prev || []).map(m => m.id === item.id ? { ...m, isStop: false, stopReason: "" } : m)); } 
+                            else { const reason = prompt(`Укажите причину стопа:`, "Закончились ингредиенты"); if (reason !== null) setMenu(prev => (prev || []).map(m => m.id === item.id ? { ...m, isStop: true, stopReason: reason } : m)); }
+                        }} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', marginLeft: '10px', flexShrink: 0 }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
                      )}
                    </div>
                  ))}
@@ -951,9 +1006,18 @@ export default function StaffApp({ currentUser, logout, lang }) {
                   </div>
                   <label style={{ cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', textAlign: 'center' }}>
                     📷 Фото
-                    <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => handlePhotoUpload(e, item.id)} />
+                    <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (event) => { setMenu(prev => (prev || []).map(m => m.id === item.id ? { ...m, imgUrl: event.target.result } : m)); alert("Фотография загружена!"); };
+                        reader.readAsDataURL(file);
+                    }} />
                   </label>
-                  <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+                  <button onClick={() => {
+                      if (item.isStop) { setMenu(prev => (prev || []).map(m => m.id === item.id ? { ...m, isStop: false, stopReason: "" } : m)); } 
+                      else { const reason = prompt(`Укажите причину стопа:`, "Закончились ингредиенты"); if (reason !== null) setMenu(prev => (prev || []).map(m => m.id === item.id ? { ...m, isStop: true, stopReason: reason } : m)); }
+                  }} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
                 </div>
               ))}
             </div>
@@ -992,9 +1056,13 @@ export default function StaffApp({ currentUser, logout, lang }) {
                       ))}
                     </div>
                     {order.status === 'new' ? (
-                      <button onClick={() => changeOrderStatus(order.id, 'cooking')} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Начать готовить</button>
+                      <button onClick={() => {
+                          setOrders(prev => (prev || []).map(o => o.id === order.id ? { ...o, status: 'cooking' } : o));
+                      }} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Начать готовить</button>
                     ) : (
-                      <button onClick={() => changeOrderStatus(order.id, 'ready_for_pickup')} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Готово / Отдать</button>
+                      <button onClick={() => {
+                          setOrders(prev => (prev || []).map(o => o.id === order.id ? { ...o, status: 'ready_for_pickup' } : o));
+                      }} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Готово / Отдать</button>
                     )}
                   </div>
                 );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, useLocalStorage } from './data.js';
+import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v11', INITIAL_MENU);
@@ -9,6 +9,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v11', { qr: 0, link: 0 });
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
+
+  // ТЕХПОДДЕРЖКА
+  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v11', INITIAL_SUPPORT);
+  const [activeSupportPhone, setActiveSupportPhone] = useState(null);
+  const [supportAdminText, setSupportAdminText] = useState('');
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [newItem, setNewItem] = useState({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' });
@@ -46,6 +51,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         if (e.key === 'amina_menu_v11') setMenu(parsed || []); if (e.key === 'amina_roles_v11') setRoles(parsed || {});
         if (e.key === 'amina_reviews_v11') setReviews(parsed || []); if (e.key === 'amina_analytics_v11') setAnalytics(parsed || { qr:0, link:0 });
         if (e.key === 'amina_customers_v11') setCustomers(parsed || {});
+        if (e.key === 'amina_support_v11') setSupportChat(parsed || []);
       } catch (err) {}
     };
     window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync);
@@ -238,6 +244,81 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       </div>
     );
   };
+
+  // --- ПАНЕЛЬ ТЕХПОДДЕРЖКИ (ОБЩАЯ ДЛЯ АДМИНА И ТЕХПОДДЕРЖКИ) ---
+  const renderSupportPanel = () => {
+    // Получаем список уникальных гостей, которые писали в поддержку
+    const chatUsersMap = new Map();
+    (supportChat || []).forEach(msg => { chatUsersMap.set(msg.phone, { phone: msg.phone, name: msg.name, lastTime: msg.time }); });
+    const chatUsersList = Array.from(chatUsersMap.values()).reverse(); // Последние сверху
+
+    return (
+      <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+        {activeSupportPhone ? (
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', border: '1px solid #d1d5db', display: 'flex', flexDirection: 'column', height: '75vh' }}>
+            {/* Шапка чата */}
+            <div style={{ padding: '15px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', background: '#f9fafb', borderRadius: '20px 20px 0 0' }}>
+               <button onClick={() => setActiveSupportPhone(null)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#e5e7eb', cursor: 'pointer', fontWeight: 'bold' }}>← Назад</button>
+               <div>
+                 <h3 style={{margin: 0, color: '#111827'}}>{chatUsersMap.get(activeSupportPhone)?.name}</h3>
+                 <p style={{margin: '2px 0 0 0', fontSize: '12px', color: '#6b7280'}}>{activeSupportPhone}</p>
+               </div>
+            </div>
+            
+            {/* Сообщения */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+               {(supportChat || []).filter(m => m.phone === activeSupportPhone).map(m => (
+                  <div key={m.id} style={{alignSelf: m.sender === 'support' ? 'flex-end' : 'flex-start', background: m.sender === 'support' ? '#3b82f6' : '#f3f4f6', color: m.sender === 'support' ? '#fff' : '#111827', padding: '12px', borderRadius: '14px', maxWidth: '85%'}}>
+                     <p style={{margin: 0, fontSize: '14px'}}>{m.text}</p>
+                     <p style={{margin: '5px 0 0 0', fontSize: '10px', opacity: 0.7, textAlign: 'right'}}>{m.time}</p>
+                  </div>
+               ))}
+            </div>
+
+            {/* Ввод сообщения */}
+            <div style={{ padding: '15px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '10px' }}>
+              <input type="text" value={supportAdminText} onChange={e=>setSupportAdminText(e.target.value)} placeholder="Написать гостю..." style={{flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', boxSizing: 'border-box'}} />
+              <button onClick={() => {
+                 if(!supportAdminText.trim()) return;
+                 setSupportChat(prev => [...(prev||[]), {id: Date.now(), phone: activeSupportPhone, name: chatUsersMap.get(activeSupportPhone)?.name, sender: 'support', text: supportAdminText, time: new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}]);
+                 setSupportAdminText('');
+              }} style={{background: '#3b82f6', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'}}>➤</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', border: '1px solid #d1d5db', overflow: 'hidden' }}>
+            <h3 style={{ margin: 0, padding: '15px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', color: '#111827' }}>Входящие обращения</h3>
+            {chatUsersList.length === 0 ? <p style={{padding: '20px', color: '#6b7280', textAlign: 'center'}}>Тикетов пока нет.</p> : 
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {chatUsersList.map(u => (
+                  <div key={u.phone} onClick={() => setActiveSupportPhone(u.phone)} style={{ padding: '15px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                    <div>
+                      <p style={{margin: 0, fontWeight: 'bold', color: '#111827', fontSize: '16px'}}>{u.name}</p>
+                      <p style={{margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280'}}>{u.phone}</p>
+                    </div>
+                    <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>Открыть ➔</span>
+                  </div>
+                ))}
+              </div>
+            }
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // --- ЭКРАН ТЕХПОДДЕРЖКИ (ТВОЙ КАБИНЕТ) ---
+  if (currentUser.role === 'developer') {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f0fdf4', fontFamily: 'Arial', paddingBottom: '80px' }}>
+        <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2>👨‍💻 Техподдержка</h2>
+          <HeaderControls />
+        </header>
+        {renderSupportPanel()}
+      </div>
+    );
+  }
 
   // --- КАБИНЕТ КАССИРА ---
   if (currentUser.role === 'cashier') {
@@ -574,8 +655,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
           <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#e5e7eb', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
           <button onClick={() => setAdminTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'tables' ? '#ec4899' : '#e5e7eb', color: adminTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
+          <button onClick={() => setAdminTab('support')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'support' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'support' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>💬 Поддержка</button>
         </div>
         
+        {/* --- ЧАТ ТЕХПОДДЕРЖКИ ДЛЯ ДИРЕКТОРА --- */}
+        {adminTab === 'support' && renderSupportPanel()}
+
         {/* --- ВЫРУЧКА ДИРЕКТОРА (НАСТОЯЩИЕ ЦИФРЫ) --- */}
         {adminTab === 'stats' && (
           <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
@@ -782,7 +867,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               {staffRolesList.map(role => (<button key={role.id} onClick={() => setAdminStaffRole(role.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminStaffRole === role.id ? '#8b5cf6' : '#f3f4f6', color: adminStaffRole === role.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{role.name}</button>))}
             </div>
 
-            {Object.entries(roles || {}).filter(([phone, data]) => data.role !== 'admin' && (adminStaffRole === 'all' || data.role === adminStaffRole)).map(([phone, data]) => (
+            {Object.entries(roles || {}).filter(([phone, data]) => data.role !== 'admin' && data.role !== 'developer' && (adminStaffRole === 'all' || data.role === adminStaffRole)).map(([phone, data]) => (
               <div key={phone} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>

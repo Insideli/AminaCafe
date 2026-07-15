@@ -74,10 +74,11 @@ function MainApp() {
     });
   }, []);
 
-  // Вышибала (защита от двойного входа)
+  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Мгновенная реакция из базы без таймеров
   useEffect(() => {
     if (isAuthenticated && currentUser.role !== 'guest' && currentUser.phone) {
       const dbToken = roles[currentUser.phone]?.sessionToken;
+      // Если база загрузилась, и токен не совпадает — выкидываем!
       if (dbToken && currentUser.sessionToken && dbToken !== currentUser.sessionToken) {
         alert(lang === 'ru' ? "⚠️ Ваш аккаунт открыт на другом устройстве! Сессия завершена." : "⚠️ Аккаунтыңыз басқа құрылғыда ашылды! Сессия аяқталды.");
         setCurrentUser({ role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null });

@@ -74,7 +74,7 @@ function MainApp() {
     });
   }, []);
 
-  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Мгновенная реакция из базы без таймеров
+  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Мгновенная реакция из базы без таймеров!
   useEffect(() => {
     if (isAuthenticated && currentUser.role !== 'guest' && currentUser.phone) {
       const dbToken = roles[currentUser.phone]?.sessionToken;
@@ -166,9 +166,6 @@ function MainApp() {
         body, html { background-color: #f4f5f7; color: #111827; }
         input, select, textarea { background-color: #fff; color: #111827; border: 1px solid #d1d5db; }
         input::placeholder, textarea::placeholder { color: #9ca3af; }
-        /* Фикс для мобильных инпутов у персонала */
-        .staff-form-row { display: flex; gap: 10px; margin-bottom: 10px; }
-        @media (max-width: 600px) { .staff-form-row { flex-direction: column; } }
       `}} />
 
       {activeUser.role === 'guest' ? 

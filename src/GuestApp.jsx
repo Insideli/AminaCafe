@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
@@ -9,6 +9,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [customers, setCustomers] = useLocalStorage('amina_customers_v11', INITIAL_CUSTOMERS);
   const [roles, setRoles] = useLocalStorage('amina_roles_v11', INITIAL_ROLES);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v11', []); 
+  const [chats, setChats] = useLocalStorage('amina_chats_v11', []); // База чатов
 
   const [selectedCategory, setSelectedCategory] = useState('all'); 
   const [activeGuestTab, setActiveGuestTab] = useState('menu'); 
@@ -22,7 +23,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   // Бронь и задаток
   const [showTimeModal, setShowTimeModal] = useState(false); 
   const [bookingTime, setBookingTime] = useState('19:00');
-  const [isBookingDeposit, setIsBookingDeposit] = useState(false); // Флаг для оплаты задатка
+  const [isBookingDeposit, setIsBookingDeposit] = useState(false); 
   
   const [paymentStatus, setPaymentStatus] = useState('idle'); 
   const [pendingOrderId, setPendingOrderId] = useState(null); 
@@ -36,6 +37,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
   const [activeStory, setActiveStory] = useState(null);
+  const [storyReply, setStoryReply] = useState('');
+
+  // Чат техподдержки
+  const [showSupportChat, setShowSupportChat] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const chatEndRef = useRef(null);
 
   // СЛОВАРЬ ПЕРЕВОДОВ ИНТЕРФЕЙСА
   const t = {
@@ -104,11 +111,25 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     );
   };
 
+  // Автоскролл чата
   useEffect(() => {
-    let meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) { meta = document.createElement('meta'); meta.name = "viewport"; document.head.appendChild(meta); }
-    meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
-  }, []);
+    if (showSupportChat && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chats, showSupportChat]);
+
+  // Запись просмотров сторисов
+  useEffect(() => {
+    if (activeStory && currentUser.phone && !currentUser.isAnonymous) {
+      setStoriesDb(prev => prev.map(s => {
+        if (s.id === activeStory.id) {
+          const views = s.viewedBy || [];
+          if (!views.includes(currentUser.phone)) return { ...s, viewedBy: [...views, currentUser.phone] };
+        }
+        return s;
+      }));
+    }
+  }, [activeStory, currentUser.phone, currentUser.isAnonymous, setStoriesDb]);
 
   // Синхронизация статусов оплат
   useEffect(() => {
@@ -142,6 +163,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   
   // НАЧАЛО БРОНИРОВАНИЯ
   const initiateBooking = (id) => { 
+    if (currentUser.isAnonymous) return logout();
     setPreOrderTableId(id); 
     setShowTimeModal(true); 
   };
@@ -150,11 +172,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const confirmBookingTime = () => { 
     if (!bookingTime) return alert(lang === 'ru' ? "Выберите время!" : "Уақытты таңдаңыз!"); 
     setIsBookingDeposit(true);
-    setPaymentStatus('kaspi_card'); // Сразу кидаем на оплату перевода
+    setPaymentStatus('kaspi_card'); 
     setShowTimeModal(false); 
   };
 
   const bookTableNow = (id) => { 
+    if (currentUser.isAnonymous) return logout();
     setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false } : t)); 
     setOrderType('in_hall'); 
   };
@@ -175,12 +198,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const totalItemsCount = cartItemsArray.reduce((sum, item) => sum + item.quantity, 0);
   const baseSubtotal = cartItemsArray.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   
-  // Если мы оплачиваем задаток за бронь, сумма жестко 1000
+  // Сумма задатка жестко 1000
   const totalAmount = isBookingDeposit ? 1000 : baseSubtotal;
   const availableBonuses = customers[currentUser?.phone]?.bonuses || 0;
 
   const createOrderObject = (statusToSet, assignedWaiterPhone = null, assignedWaiterName = null, payMethod = 'kaspi') => {
-    // Если это задаток, создаем специальный чек
     if (isBookingDeposit) {
       return { 
         id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: currentUser.phone, tableId: preOrderTableId, tableName: "Бронь стола (Задаток)", cartItems: [], itemsText: lang === 'ru' ? "Задаток за бронь" : "Брондау алдын ала төлемі", total: 1000, tips: 0, isPreOrder: false, bookedTime: bookingTime, orderType: 'in_hall', deliveryAddress: '', 
@@ -216,9 +238,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
     setOrders(prev => [newOrder, ...(prev || [])]);
     
-    // Бронируем стол, если это задаток
     if (isBookingDeposit && preOrderTableId) {
-       setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
+       // Статус booked (а не occupied), чтобы работало автоснятие через 30 минут
+       setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'booked', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
     }
     
     setPendingOrderId(newOrder.id);
@@ -266,13 +288,33 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
      setReviewOrder(null); setReviewRating(0); setReviewText(''); alert(lang === 'ru' ? 'Спасибо за ваш отзыв!' : 'Пікіріңізге рахмет!');
   };
 
+  // ОТПРАВКА СООБЩЕНИЯ В ЧАТ
+  const sendChatMessage = (e) => {
+    e.preventDefault();
+    if (!chatMessage.trim() || currentUser.isAnonymous) return;
+    const newMsg = { id: Date.now(), from: currentUser.phone, name: currentUser.name, text: chatMessage, timestamp: Date.now(), isRead: false, type: 'support' };
+    setChats(prev => [...(prev || []), newMsg]);
+    setChatMessage('');
+  };
+
+  // ОТПРАВКА ОТВЕТА НА СТОРИС
+  const sendStoryReply = (e) => {
+    e.preventDefault();
+    if (!storyReply.trim() || currentUser.isAnonymous) return;
+    const storyTitle = activeStory.title.ru || activeStory.title;
+    const newMsg = { id: Date.now(), from: currentUser.phone, name: currentUser.name, text: `[Ответ на сторис "${storyTitle}"]: ${storyReply}`, timestamp: Date.now(), isRead: false, type: 'story_reply' };
+    setChats(prev => [...(prev || []), newMsg]);
+    setStoryReply('');
+    alert(lang === 'ru' ? 'Ответ отправлен!' : 'Жауап жіберілді!');
+    setActiveStory(null);
+  };
+
   const displayedMenu = selectedCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === selectedCategory);
-  
   const tableGroupsList = ['all', ...(Array.from(new Set((tables || []).map(t => t.group[lang] || t.group.ru || t.group))))];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
   const availableWaitersList = Object.entries(roles || {}).filter(([p, data]) => data.role === 'waiter' && data.onShift);
-
   const myOrdersHistory = (orders || []).filter(o => o.phone === currentUser.phone);
+  const myChats = (chats || []).filter(c => c.from === currentUser.phone || c.to === currentUser.phone);
 
   // ФИЛЬТР СТОРИС: Показываем только активные и те, которым меньше 24 часов
   const activeStories = (storiesDb || []).filter(s => {
@@ -290,7 +332,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         ::-webkit-scrollbar { display: none; }
         .app-wrapper { display: flex; flex-direction: column; width: 100%; min-height: 100vh; overflow-x: hidden; padding-bottom: 80px; position: relative; }
         
-        .payment-overlay { position: fixed; inset: 0; background: rgba(17,24,39,0.7); z-index: 9999; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; backdrop-filter: blur(4px); }
+        .payment-overlay { position: fixed; inset: 0; background: rgba(17,24,39,0.8); z-index: 9999; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; backdrop-filter: blur(4px); }
         .payment-modal { background: #fff; width: 100%; max-width: 500px; border-radius: 28px 28px 0 0; padding: 30px 25px; animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto;}
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes spinPulse { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.1); } 100% { transform: rotate(360deg) scale(1); } }
@@ -325,14 +367,17 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         .stories-row { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; width: 100%; }
         .story-item { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; cursor: pointer; }
         .story-circle { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; outline: 3px solid var(--orange); overflow: hidden; background: #e5e7eb; }
+        
+        /* Исправленная сетка для блюд */
         .food-list { display: grid; grid-template-columns: 1fr; gap: 12px; width: 100%; }
-        .food-card { background: #fff; padding: 12px; border-radius: 16px; display: flex; gap: 12px; align-items: center; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.03); box-sizing: border-box; }
+        .food-card { background: #fff; padding: 12px; border-radius: 16px; display: grid; grid-template-columns: 65px 1fr auto auto; gap: 10px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.03); box-sizing: border-box; }
         .food-pic { width: 65px; height: 65px; border-radius: 12px; background: #f9fafb; display: flex; align-items: center; justify-content: center; font-size: 35px; flex-shrink: 0; overflow: hidden; }
-        .food-info { flex: 1; min-width: 0; }
+        .food-info { min-width: 0; }
         .food-name { margin: 0 0 4px 0; font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.2; white-space: normal; word-wrap: break-word; }
         .food-ingr { margin: 0 0 8px 0; font-size: 11px; color: var(--gray); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .food-price { background: #fff7ed; color: var(--orange); padding: 4px 8px; border-radius: 6px; font-weight: 900; font-size: 13px; display: inline-block; }
+        .food-price { background: #fff7ed; color: var(--orange); padding: 4px 8px; border-radius: 6px; font-weight: 900; font-size: 13px; display: inline-block; white-space: nowrap; }
         .food-add { width: 40px; height: 40px; border-radius: 12px; background: var(--text); color: #fff; border: none; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+        
         .tables-filter-bar { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; width: 100%; }
         .filter-btn { padding: 10px 18px; border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; color: var(--gray); font-weight: 800; font-size: 13px; white-space: nowrap; cursor: pointer; transition: 0.2s; }
         .filter-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
@@ -357,9 +402,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           .categories-sidebar { display: none; } 
           .food-list { grid-template-columns: repeat(2, 1fr); gap: 20px; }
           .food-card { padding: 16px; gap: 16px; border-radius: 20px; }
-          .food-pic { width: 80px; height: 80px; font-size: 40px; border-radius: 14px; }
-          .food-name { font-size: 16px; margin-bottom: 6px; }
-          .food-ingr { font-size: 13px; margin-bottom: 8px; }
           .tables-grid { grid-template-columns: repeat(4, 1fr); gap: 15px; }
           .payment-overlay { align-items: center; }
           .payment-modal { border-radius: 24px; }
@@ -386,18 +428,66 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- ПОЛНОЭКРАННАЯ СТОРИС С ПОДДЕРЖКОЙ ВИДЕО --- */}
+      {/* --- ЧАТ ТЕХПОДДЕРЖКИ --- */}
+      {showSupportChat && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f9fafb', zIndex: 99999, display: 'flex', flexDirection: 'column' }}>
+           <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+             <div>
+               <h2 style={{margin: 0, fontSize: '18px'}}>{lang === 'ru' ? 'Техподдержка' : 'Қолдау қызметі'}</h2>
+               <p style={{margin: '2px 0 0 0', fontSize: '12px', color: '#9ca3af'}}>{lang === 'ru' ? 'Ответим в течение 5 минут' : '5 минут ішінде жауап береміз'}</p>
+             </div>
+             <button onClick={() => setShowSupportChat(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
+           </div>
+           
+           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {myChats.length === 0 ? (
+                <div style={{textAlign: 'center', color: '#6b7280', marginTop: '40px'}}>
+                  <div style={{fontSize: '40px', marginBottom: '10px'}}>💬</div>
+                  <p>{lang === 'ru' ? 'Задайте свой вопрос или ответьте на сторис.' : 'Сұрағыңызды қойыңыз немесе сториске жауап беріңіз.'}</p>
+                </div>
+              ) : (
+                myChats.map(msg => {
+                  const isMe = msg.from === currentUser.phone;
+                  return (
+                    <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '80%', background: isMe ? '#10b981' : '#e5e7eb', color: isMe ? '#fff' : '#111827', padding: '12px 16px', borderRadius: isMe ? '16px 16px 0 16px' : '16px 16px 16px 0', fontSize: '14px', lineHeight: '1.4' }}>
+                       {msg.text}
+                       <div style={{fontSize: '10px', textAlign: 'right', marginTop: '5px', opacity: 0.7}}>
+                         {new Date(msg.timestamp).toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
+                       </div>
+                    </div>
+                  )
+                })
+              )}
+              <div ref={chatEndRef} />
+           </div>
+
+           <form onSubmit={sendChatMessage} style={{ padding: '15px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '10px' }}>
+              <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)} placeholder={lang === 'ru' ? "Сообщение..." : "Хабарлама..."} style={{flex: 1, padding: '14px', borderRadius: '24px', border: '1px solid #d1d5db', outline: 'none', fontSize: '14px'}} />
+              <button type="submit" style={{width: '48px', height: '48px', borderRadius: '50%', background: '#111827', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'}}>➔</button>
+           </form>
+        </div>
+      )}
+
+      {/* --- ПОЛНОЭКРАННАЯ СТОРИС С ОТВЕТАМИ --- */}
       {activeStory && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }} onClick={() => setActiveStory(null)}>
-           <button onClick={() => setActiveStory(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: '40px', height: '40px', borderRadius: '50%', fontSize: '20px', cursor: 'pointer', zIndex: 10 }}>✕</button>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 99999, display: 'flex', flexDirection: 'column' }}>
+           <div style={{padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+              <h2 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>{activeStory.title[lang] || activeStory.title.ru || activeStory.title}</h2>
+              <button onClick={() => setActiveStory(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: '36px', height: '36px', borderRadius: '50%', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+           </div>
            
-           {activeStory.type === 'video' ? (
-             <video src={activeStory.imgUrl} controls autoPlay style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain' }} onClick={e => e.stopPropagation()} />
-           ) : (
-             <img src={activeStory.imgUrl} style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain' }} alt="Story" onClick={e => e.stopPropagation()} />
-           )}
-           
-           <h2 style={{ color: '#fff', marginTop: '20px', textAlign: 'center' }}>{activeStory.title[lang] || activeStory.title.ru || activeStory.title}</h2>
+           <div style={{flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden'}} onClick={() => setActiveStory(null)}>
+             {activeStory.type === 'video' ? (
+               <video src={activeStory.imgUrl} controls autoPlay style={{ width: '100%', maxHeight: '100%', objectFit: 'contain' }} onClick={e => e.stopPropagation()} />
+             ) : (
+               <img src={activeStory.imgUrl} style={{ width: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="Story" onClick={e => e.stopPropagation()} />
+             )}
+           </div>
+
+           <form onSubmit={sendStoryReply} style={{ padding: '20px', background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)', display: 'flex', gap: '10px' }}>
+              <input type="text" value={storyReply} onChange={e => setStoryReply(e.target.value)} placeholder={lang === 'ru' ? "Ответить на историю..." : "Сториске жауап беру..."} style={{flex: 1, padding: '14px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff', outline: 'none', fontSize: '14px'}} />
+              <button type="submit" style={{width: '48px', height: '48px', borderRadius: '50%', background: '#fff', color: '#111827', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontWeight: 'bold'}}>➔</button>
+           </form>
         </div>
       )}
 
@@ -450,7 +540,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ОПЛАТЫ (Только реальные методы) --- */}
+      {/* --- МОДАЛЬНОЕ ОКНО ОПЛАТЫ (БЕЗ ФЕЙКОВ) --- */}
       {paymentStatus !== 'idle' && (
         <div className="payment-overlay">
           <div className="payment-modal">
@@ -470,7 +560,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   </div>
                 </div>
 
-                {!isBookingDeposit && ( // Задаток наличными не берут, только заказы в зале
+                {!isBookingDeposit && (
                   <div className="pay-method-btn" onClick={handleCashSelection}>
                     <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
                       <div style={{background: '#ecfdf5', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>💵</div>
@@ -512,7 +602,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
             {paymentStatus === 'kaspi_card' && (
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
-                  <button onClick={() => setPaymentStatus(isBookingDeposit ? 'idle' : 'select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
+                  <button onClick={() => { if(isBookingDeposit) { setPaymentStatus('idle'); setIsBookingDeposit(false); } else { setPaymentStatus('select_method'); } }} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
                   <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>{t.payKaspi}</h2>
                 </div>
                 
@@ -619,7 +709,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
             <div className="content-area">
               <button className="hamburger-menu-trigger" onClick={() => setIsMenuOpen(true)}><span>☰</span> {t.cats}</button>
               
-              {/* СТОРИСЫ (ОТФИЛЬТРОВАННЫЕ ДО 24 ЧАСОВ) */}
+              {/* СТОРИСЫ */}
               {activeStories.length > 0 && (
                 <div className="stories-row">
                   {activeStories.map(story => (
@@ -631,7 +721,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                           <img src={story.imgUrl} style={{width:'100%', height:'100%', objectFit:'cover'}} alt=""/>
                         )}
                       </div>
-                      <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#111827' }}>{story.title[lang] || story.title.ru || story.title}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#111827' }}>{story.title.ru || story.title}</span>
                     </div>
                   ))}
                 </div>
@@ -685,11 +775,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                           </div>
                         ) : table.status === 'free' && !myCurrentTable ? (
                           <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
-                            <button onClick={() => { if(currentUser.isAnonymous) return logout(); bookTableNow(table.id); }} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>{t.sit}</button>
-                            <button onClick={() => { if(currentUser.isAnonymous) return logout(); initiateBooking(table.id); }} style={{ padding: '8px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'transparent', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>{t.book}</button>
+                            <button onClick={() => bookTableNow(table.id)} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>{t.sit}</button>
+                            <button onClick={() => initiateBooking(table.id)} style={{ padding: '8px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'transparent', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>{t.book}</button>
                           </div>
                         ) : (
-                          <div style={{ backgroundColor: '#fef2f2', padding: '10px', borderRadius: '8px' }}><span style={{ color: '#dc2626', fontWeight: '900', fontSize: '12px', display: 'block' }}>{t.occupied}</span></div>
+                          <div style={{ backgroundColor: '#fef2f2', padding: '10px', borderRadius: '8px' }}><span style={{ color: '#dc2626', fontWeight: '900', fontSize: '12px', display: 'block' }}>{table.status === 'booked' ? 'Бронь' : t.occupied}</span></div>
                         )}
                       </div>
                     ))}
@@ -747,6 +837,10 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <h2 style={{ margin: '0 0 10px 0', color: '#fff' }}>{currentUser.name}</h2>
                   <p style={{ color: '#10b981', fontSize: '24px', fontWeight: '900', margin: 0 }}>{t.cashback}: {availableBonuses} ₸</p>
                 </div>
+                
+                <button onClick={() => setShowSupportChat(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#f3f4f6', color: '#111827', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                   💬 Тех. Поддержка / Чат
+                </button>
 
                 <button onClick={handleInstallClick} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                    📱 {t.installApp}

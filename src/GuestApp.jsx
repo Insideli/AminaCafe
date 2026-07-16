@@ -29,6 +29,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [isChangingTable, setIsChangingTable] = useState(false);
   const [changingFromTableId, setChangingFromTableId] = useState(null);
   const [waiterCallTableId, setWaiterCallTableId] = useState(null);
+  const [isArrivalCall, setIsArrivalCall] = useState(false); // Для вызова "Я пришел"
 
   const [paymentStatus, setPaymentStatus] = useState('idle'); 
   const [pendingOrderId, setPendingOrderId] = useState(null); 
@@ -82,9 +83,10 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     );
   };
 
+  const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal;
+
   // ФИКС СКРОЛЛА: Блокируем скролл заднего фона и резинку при открытии модалок
   useEffect(() => {
-    const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal;
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
       document.body.style.overscrollBehavior = 'none';
@@ -96,7 +98,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       document.body.style.overflow = 'auto'; 
       document.body.style.overscrollBehavior = 'auto';
     };
-  }, [paymentStatus, showTimeModal, waiterCallTableId, reviewOrder, showIOSInstallGuide, showSupportModal]);
+  }, [isAnyModalOpen]);
 
   useEffect(() => {
     let meta = document.querySelector('meta[name="viewport"]');
@@ -125,14 +127,46 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
   
+  // ПРОВЕРКА: БЛИЖЕ ЛИ БРОНЬ ЧЕМ НА 2 ЧАСА?
+  const checkIsBlocked = (timeStr) => {
+    if (!timeStr) return false;
+    const now = new Date();
+    const [h, m] = timeStr.split(':').map(Number);
+    const bDate = new Date();
+    bDate.setHours(h, m, 0, 0);
+    const diffMs = bDate.getTime() - now.getTime();
+    return diffMs > 0 && diffMs <= 7200000; // 2 часа (в миллисекундах)
+  };
+
+  const getEvictionTime = (timeStr) => {
+    if (!timeStr) return '';
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m - 30, 0, 0);
+    return d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+  };
+
   const initiateBooking = (id) => { setPreOrderTableId(id); setShowTimeModal(true); };
+  
+  // НОВАЯ ЛОГИКА: ОПЛАТА 1000 ТГ ЗА БРОНЬ
   const confirmBookingTime = () => { 
     if (!bookingTime) return alert("Выберите время!"); 
-    setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime, isCalling: false, calledWaiter: null } : t));
-    setOrderType('in_hall'); 
+    setPaymentStatus('kaspi_card_booking');
     setShowTimeModal(false); 
-    setPreOrderTableId(null);
-    alert(lang === 'ru' ? `Стол успешно забронирован на ${bookingTime}!` : `${bookingTime} уақытына үстел сәтті брондалды!`); 
+  };
+
+  const confirmBookingTransfer = () => {
+    const newOrder = {
+       id: `BKG-${Math.floor(Math.random() * 10000)}`,
+       phone: currentUser.phone, tableId: preOrderTableId, tableName: 'Залог за стол',
+       cartItems: [], itemsText: `Залог за бронь на ${bookingTime}`,
+       total: 1000, orderType: 'booking_deposit',
+       date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+       status: 'new', payMethod: 'kaspi'
+    };
+    setOrders(prev => [newOrder, ...(prev || [])]);
+    // Бронь официально записывается на стол
+    setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, bookedBy: currentUser.phone, bookedTime: bookingTime, status: 'free' } : t));
+    setPaymentStatus('booking_success');
   };
 
   const bookTableNow = (id) => { setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false, calledWaiter: null } : t)); setOrderType('in_hall'); };
@@ -149,20 +183,15 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const handleChangeTableConfirm = (newId) => {
     const newTable = (tables || []).find(t => t.id === newId);
-    
     setTables(prev => (prev || []).map(t => {
         if (t.id === changingFromTableId) return { ...t, status: 'free', bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null };
         if (t.id === newId) return { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCalling: false, calledWaiter: null };
         return t;
     }));
-
     setOrders(prev => (prev || []).map(o => {
-        if (o.tableId === changingFromTableId && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected') {
-            return { ...o, tableId: newId, tableName: newTable.name };
-        }
+        if (o.tableId === changingFromTableId && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected') return { ...o, tableId: newId, tableName: newTable.name };
         return o;
     }));
-
     setIsChangingTable(false);
     setChangingFromTableId(null);
     alert(lang === 'ru' ? "Вы успешно пересели за " + newTable.name + "!" : "Сіз " + newTable.name + " үстеліне ауыстыңыз!");
@@ -196,22 +225,18 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const confirmTransfer = () => {
     const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
     setOrders(prev => [newOrder, ...(prev || [])]);
-    if (isPreOrderFlow && preOrderTableId) setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
     setPendingOrderId(newOrder.id);
     setPaymentStatus('processing'); 
   };
 
   const handleCashSelection = () => {
-    if (orderType !== 'in_hall' || !activeTable) {
-      return alert(lang === 'ru' ? 'Оплата наличными доступна только при заказе за столиком в заведении!' : 'Қолма-қол ақшамен төлеу тек залда отырғанда ғана мүмкін!');
-    }
+    if (orderType !== 'in_hall' || !activeTable) return alert(lang === 'ru' ? 'Оплата наличными доступна только при заказе за столиком в заведении!' : 'Қолма-қол ақшамен төлеу тек залда отырғанда ғана мүмкін!');
     setPaymentStatus('select_waiter');
   };
 
   const confirmCashWithWaiter = (waiterPhone, waiterName) => {
     const newOrder = createOrderObject('waiter_pending', waiterPhone, waiterName, 'cash');
     setOrders(prev => [newOrder, ...(prev || [])]);
-    if (isPreOrderFlow && preOrderTableId) setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: bookingTime } : t));
     setPendingOrderId(newOrder.id);
     setPaymentStatus('waiter_pending');
   };
@@ -236,7 +261,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const submitReview = () => {
      if (reviewRating === 0) return alert('Выберите оценку в звездах!');
      if (reviewRating <= 3 && reviewText.trim().length === 0) return alert('Пожалуйста, напишите причину низкой оценки, чтобы мы стали лучше.');
-     
      const newReview = { id: `REV-${Date.now()}`, type: reviewOrder.waiterPhone ? 'waiter' : 'cafe', targetId: reviewOrder.waiterPhone || 'cafe', targetName: reviewOrder.waiterName || 'Кафе Амина', rating: reviewRating, text: reviewText, author: currentUser.name, date: new Date().toLocaleDateString('ru-RU') };
      setReviews(prev => [newReview, ...(prev || [])]);
      setOrders(prev => (prev || []).map(o => o.id === reviewOrder.id ? { ...o, isReviewed: true } : o));
@@ -247,7 +271,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
   const availableWaitersList = Object.entries(roles || {}).filter(([p, data]) => data.role === 'waiter' && data.onShift);
-
   const myOrdersHistory = (orders || []).filter(o => o.phone === currentUser.phone);
 
   return (
@@ -257,9 +280,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; max-width: 100vw; overflow-x: hidden; background-color: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text); }
         ::-webkit-scrollbar { display: none; }
-        .app-wrapper { display: flex; flex-direction: column; width: 100%; min-height: 100vh; overflow-x: hidden; padding-bottom: 80px; position: relative; }
+        .app-wrapper { display: flex; flex-direction: column; width: 100%; min-height: 100vh; overflow-x: hidden; padding-bottom: 80px; position: relative; overscroll-behavior: none; }
         
-        .payment-overlay { position: fixed; inset: 0; background: rgba(17,24,39,0.7); z-index: 9999; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; backdrop-filter: blur(4px); }
+        .payment-overlay { position: fixed; inset: 0; height: 100dvh; background: rgba(17,24,39,0.7); z-index: 9999; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; backdrop-filter: blur(4px); overscroll-behavior: none; }
         .payment-modal { background: #fff; width: 100%; max-width: 500px; border-radius: 28px 28px 0 0; padding: 30px 25px; animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; display: flex; flex-direction: column; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes spinPulse { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.1); } 100% { transform: rotate(360deg) scale(1); } }
@@ -336,7 +359,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         @media (min-width: 1200px) { .tables-grid { grid-template-columns: repeat(5, 1fr); } }
       `}}/>
 
-      {/* --- ИНСТРУКЦИЯ ПО УСТАНОВКЕ ДЛЯ iPHONE/SAFARI --- */}
       {showIOSInstallGuide && (
          <div className="payment-overlay" onClick={() => setShowIOSInstallGuide(false)}>
            <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', padding: '40px 20px', overflowY: 'auto'}}>
@@ -353,9 +375,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
          </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ (ПОЛНОЭКРАННОЕ ДЛЯ ТЕЛЕФОНОВ) --- */}
+      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ (100DVH И ЖЕСТКАЯ ФИКСАЦИЯ) --- */}
       {showSupportModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100dvh', overscrollBehavior: 'none' }}>
           <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
             <div>
               <h2 style={{margin: 0, fontSize: '20px'}}>💬 Поддержка</h2>
@@ -387,13 +409,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ВРЕМЕНИ ДЛЯ БРОНИ --- */}
       {showTimeModal && (
         <div className="payment-overlay" onClick={() => setShowTimeModal(false)}>
           <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', overflowY: 'auto'}}>
              <h2 style={{margin: '0 0 15px 0', color: '#111827'}}>{lang === 'ru' ? 'Выберите время' : 'Уақытты таңдаңыз'}</h2>
              <input type="time" value={bookingTime} onChange={e=>setBookingTime(e.target.value)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d5db', marginBottom: '20px', fontSize: '20px', textAlign: 'center', fontWeight: 'bold', color: '#111827'}} />
-             <button onClick={confirmBookingTime} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#10b981', color: '#fff', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginBottom: '10px', fontSize: '16px'}}>{lang === 'ru' ? 'Забронировать' : 'Брондау'}</button>
+             <button onClick={confirmBookingTime} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#10b981', color: '#fff', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginBottom: '10px', fontSize: '16px'}}>{lang === 'ru' ? 'Забронировать (Залог 1000₸)' : 'Брондау (Залог 1000₸)'}</button>
              <button onClick={() => { setShowTimeModal(false); setPreOrderTableId(null); }} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '16px'}}>{lang === 'ru' ? 'Отмена' : 'Болдырмау'}</button>
           </div>
         </div>
@@ -409,13 +430,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
              </div>
              <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px', flexShrink: 0}}>{lang === 'ru' ? 'Выберите официанта, который подойдет к вашему столику.' : 'Үстеліңізге келетін даяшыны таңдаңыз.'}</p>
              
-             {/* ВНУТРЕННИЙ СКРОЛЛ ДЛЯ СПИСКА */}
              <div style={{display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '60vh', overflowY: 'auto', paddingRight: '5px'}}>
                 {availableWaitersList.length === 0 ? <p style={{color: '#dc2626', textAlign: 'center'}}>{lang === 'ru' ? 'Нет свободных официантов' : 'Бос даяшылар жоқ'}</p> : 
                   availableWaitersList.map(([p, data]) => (
                      <button key={p} onClick={() => {
-                        setTables(prev => (prev || []).map(t => t.id === waiterCallTableId ? { ...t, isCalling: true, calledWaiter: p } : t));
+                        setTables(prev => (prev || []).map(t => t.id === waiterCallTableId ? { ...t, isCalling: true, calledWaiter: p, callType: isArrivalCall ? 'arrival' : 'normal' } : t));
                         setWaiterCallTableId(null);
+                        setIsArrivalCall(false);
                         alert(lang === 'ru' ? "Официант уведомлен! Скоро подойдет." : "Даяшыға хабарланды! Жақында келеді.");
                      }} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderRadius: '14px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', flexShrink: 0}}>
                         <span style={{fontWeight: 'bold', color: '#111827', fontSize: '16px'}}>{data.name}</span>
@@ -428,7 +449,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ОТЗЫВА --- */}
       {reviewOrder && (
         <div className="payment-overlay">
           <div className="payment-modal" style={{textAlign: 'center', overflowY: 'auto'}}>
@@ -460,12 +480,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ОПЛАТЫ --- */}
       {paymentStatus !== 'idle' && (
         <div className="payment-overlay">
           <div className="payment-modal" style={{overflowY: 'auto'}}>
             
-            {/* ЭКРАН 1: ВЫБОР СПОСОБА */}
+            {/* ЭКРАН: ВЫБОР СПОСОБА */}
             {paymentStatus === 'select_method' && (
               <>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
@@ -497,7 +516,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЭКРАН 1.5: ВЫБОР ОФИЦИАНТА */}
             {paymentStatus === 'select_waiter' && (
               <>
                  <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
@@ -524,7 +542,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЭКРАН 2: РЕКВИЗИТЫ ПЕРЕВОДА */}
             {paymentStatus === 'kaspi_card' && (
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
@@ -532,7 +549,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>Безопасный перевод</h2>
                 </div>
                 
-                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Скопируйте номер карты and переведите точную сумму в приложении вашего банка.</p>
+                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Скопируйте номер карты и переведите точную сумму в приложении вашего банка.</p>
                 
                 <div style={{background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '20px', marginBottom: '25px', textAlign: 'center'}}>
                   <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>К оплате</p>
@@ -551,7 +568,42 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЭКРАН 3: ЗАГРУЗКА (Бесконечная) */}
+            {/* ЭКРАН: ОПЛАТА ЗАЛОГА (БРОНЬ) */}
+            {paymentStatus === 'kaspi_card_booking' && (
+              <>
+                <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
+                  <button onClick={() => setPaymentStatus('idle')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
+                  <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>Оплата залога</h2>
+                </div>
+                
+                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Для подтверждения брони столика внесите залог. В случае неприбытия сумма не возвращается.</p>
+                
+                <div style={{background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '20px', marginBottom: '25px', textAlign: 'center'}}>
+                  <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>К оплате</p>
+                  <p style={{margin: '0 0 20px 0', fontSize: '36px', fontWeight: '900', color: '#ea580c'}}>1000 ₸</p>
+                  
+                  <div style={{textAlign: 'left'}}>
+                    <p style={{margin: '0 0 8px 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>Номер карты (Visa / Mastercard)</p>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '15px', borderRadius: '14px', border: '2px dashed #d1d5db'}}>
+                      <span style={{fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#111827'}}>4400 4302 5493 5945</span>
+                      <button onClick={() => copyToClipboard('4400430254935945')} style={{background: '#111827', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px'}}>Копия</button>
+                    </div>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px'}}><span style={{color: '#10b981', fontSize: '18px'}}>✓</span><span style={{fontSize: '14px', color: '#111827', fontWeight: 'bold'}}>Получатель: Эльвира А.</span></div>
+                  </div>
+                </div>
+                <button onClick={confirmBookingTransfer} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'}}>Я перевел(а) 1000 ₸</button>
+              </>
+            )}
+
+            {paymentStatus === 'booking_success' && (
+              <div style={{textAlign: 'center', padding: '30px 0'}}>
+                <div style={{fontSize: '70px', color: '#10b981', marginBottom: '15px'}}>✅</div>
+                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#111827'}}>Бронь подтверждена!</h2>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Стол забронирован на ваше имя. Когда приедете в заведение, нажмите кнопку «🙋‍♂️ Я пришел» на карточке вашего столика.</p>
+                <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); setActiveGuestTab('table'); }} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Супер</button>
+              </div>
+            )}
+
             {paymentStatus === 'processing' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
@@ -560,7 +612,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ЭКРАН 3.5: ОЖИДАНИЕ ОФИЦИАНТА */}
             {paymentStatus === 'waiter_pending' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
@@ -569,7 +620,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ЭКРАН 4: ОТКЛОНЕН */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
@@ -579,7 +629,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ЭКРАН 5: УСПЕХ */}
             {paymentStatus === 'success' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', color: '#10b981', marginBottom: '15px'}}>✅</div>
@@ -589,7 +638,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ЭКРАН 6: УСПЕХ (Наличные) */}
             {paymentStatus === 'cash_success' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>✅</div>
@@ -690,32 +738,53 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <h4 style={{ fontSize: '18px', color: '#111827', margin: "0 0 15px 0" }}>📍 {groupName}</h4>
                   <div className="tables-grid">
                     {groupTables.map(table => (
-                      <div key={table.id} style={{ padding: '15px 10px', borderRadius: '14px', border: table.bookedBy === currentUser?.phone ? '2px solid #10b981' : '1px solid #e5e7eb', backgroundColor: table.status === 'free' ? '#f8fafc' : '#fff', textAlign: 'center', boxSizing: 'border-box' }}>
+                      <div key={table.id} style={{ padding: '15px 10px', borderRadius: '14px', border: table.bookedBy === currentUser?.phone ? '2px solid #10b981' : '1px solid #e5e7eb', backgroundColor: table.status === 'free' && table.bookedBy ? '#fff7ed' : table.status === 'free' ? '#f8fafc' : '#fff', textAlign: 'center', boxSizing: 'border-box' }}>
                         <div style={{ fontSize: '30px', marginBottom: '8px' }}>{table.imgUrl ? <img src={table.imgUrl} alt={table.name} style={{width: '45px', height: '45px', borderRadius: '10px', objectFit: 'cover'}}/> : getTableIcon(table.type)}</div>
                         <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#111827', fontWeight: '800', lineHeight: '1.2' }}>{table.name}</h3>
                         <p style={{ fontSize: '11px', color: '#6b7280', margin: '0 0 10px 0' }}>Мест: {table.seats}</p>
                         
-                        {/* ЛОГИКА ОТОБРАЖЕНИЯ КНОПОК */}
+                        {/* ЛОГИКА ОТОБРАЖЕНИЯ БРОНИ ДЛЯ ГОСТЕЙ */}
                         {table.bookedBy === currentUser?.phone && !currentUser.isAnonymous ? (
                           <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-                            <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>🔒 Ваш стол</span>
+                            <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>
+                              🔒 Ваш стол {table.bookedTime ? `(на ${table.bookedTime})` : ''}
+                            </span>
                             
-                            {(() => {
-                              // Проверяем, есть ли у гостя активный заказ за этим столом
-                              const hasOrder = (orders || []).some(o => o.tableId === table.id && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected');
-                              
-                              if (hasOrder) {
-                                return <button onClick={() => handleChangeTableStart(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #3b82f6', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🔄 Поменять стол</button>;
-                              } else {
-                                return <button onClick={() => handleFreeTable(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: '#fef2f2', color: '#dc2626', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🚪 Освободить</button>;
-                              }
-                            })()}
-
-                            <button onClick={() => setWaiterCallTableId(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: table.isCalling ? '#f59e0b' : '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '12px' }}>
-                              {table.isCalling ? 'Идет...' : '🛎️ Официант'}
-                            </button>
+                            {/* ЕСЛИ СТОЛ ЗАБРОНИРОВАН, НО Я ЕЩЕ НЕ ПОДТВЕРЖДЕН ОФИЦИАНТОМ */}
+                            {table.status === 'free' && table.bookedTime ? (
+                               <>
+                                 <button onClick={() => { setIsArrivalCall(true); setWaiterCallTableId(table.id); }} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#ea580c', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 5px rgba(234,88,12,0.3)' }}>🙋‍♂️ Я пришел</button>
+                                 <button onClick={() => handleFreeTable(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#dc2626', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer' }}>Отменить (без возврата 1000₸)</button>
+                               </>
+                            ) : (
+                               <>
+                                 {(() => {
+                                    const hasOrder = (orders || []).some(o => o.tableId === table.id && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected');
+                                    if (hasOrder) {
+                                      return <button onClick={() => handleChangeTableStart(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #3b82f6', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🔄 Поменять стол</button>;
+                                    } else {
+                                      return <button onClick={() => handleFreeTable(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: '#fef2f2', color: '#dc2626', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🚪 Освободить</button>;
+                                    }
+                                 })()}
+                                 <button onClick={() => { setIsArrivalCall(false); setWaiterCallTableId(table.id); }} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: table.isCalling ? '#f59e0b' : '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '12px' }}>
+                                   {table.isCalling ? 'Идет...' : '🛎️ Официант'}
+                                 </button>
+                               </>
+                            )}
                           </div>
-                        ) : table.status === 'free' && !myCurrentTable ? (
+                        ) : table.status === 'free' && table.bookedBy && table.bookedBy !== currentUser?.phone ? (
+                          checkIsBlocked(table.bookedTime) ? (
+                            <div style={{ backgroundColor: '#fef2f2', padding: '10px', borderRadius: '8px', border: '1px solid #dc2626' }}>
+                               <span style={{ color: '#dc2626', fontWeight: '900', fontSize: '11px', display: 'block' }}>⛔ Бронь на {table.bookedTime}</span>
+                               <span style={{ color: '#dc2626', fontSize: '10px' }}>Стол заблокирован</span>
+                            </div>
+                          ) : (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
+                              <span style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: '11px', padding: '4px', background: '#fef3c7', borderRadius: '6px' }}>Бронь на {table.bookedTime}</span>
+                              <button onClick={() => { if(currentUser.isAnonymous) return logout(); bookTableNow(table.id); }} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Сесть (до {getEvictionTime(table.bookedTime)})</button>
+                            </div>
+                          )
+                        ) : table.status === 'free' && !table.bookedBy ? (
                           isChangingTable ? (
                             <button onClick={() => handleChangeTableConfirm(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Пересесть сюда</button>
                           ) : (
@@ -753,7 +822,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                    <button onClick={handleGetLocation} style={{background: '#e0f2fe', color: '#0369a1', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'}}>🗺️ {lang === 'ru' ? 'По геоданным' : 'Геодеректер бойынша'}</button>
                 </div>
                 <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе картадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
                 <input type="text" placeholder={lang === 'ru' ? "Комментарий курьеру" : "Курьерге пікір"} value={address.comment} onChange={e=>setAddress({...address, comment: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
               </div>
             )}
@@ -825,8 +894,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         )}
       </main>
 
-      {/* ФИКС ДЫРКИ: Скрываем нижний бар навигации, когда чат поддержки открыт на весь экран */}
-      {!showSupportModal && (
+      {/* ФИКС ДЫРКИ: Скрываем панель, если открыта ЛЮБАЯ модалка */}
+      {!isAnyModalOpen && (
         <nav className="mobile-nav">
           <button className={`nav-item ${activeGuestTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveGuestTab('menu')}><span className="nav-icon">🍔</span> {t.menu}</button>
           <button className={`nav-item ${activeGuestTab === 'table' ? 'active' : ''}`} onClick={() => setActiveGuestTab('table')}><span className="nav-icon">🪑</span> {t.halls}</button>

@@ -74,6 +74,21 @@ function MainApp() {
     });
   }, []);
 
+  // ЖЕСТКАЯ БЛОКИРОВКА ФОНА И РЕЗИНКИ ПРИ ОТКРЫТИИ ОКНА АВТОРИЗАЦИИ
+  useEffect(() => {
+    if (showAuthModal) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+    } else {
+      document.body.style.overflow = 'auto';
+      document.body.style.overscrollBehavior = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+      document.body.style.overscrollBehavior = 'auto';
+    };
+  }, [showAuthModal]);
+
   // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Мгновенная реакция из базы без таймеров!
   useEffect(() => {
     if (isAuthenticated && currentUser.role !== 'guest' && currentUser.phone) {
@@ -180,7 +195,7 @@ function MainApp() {
       }
       
       {showAuthModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
+        <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>

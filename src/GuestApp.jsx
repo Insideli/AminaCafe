@@ -13,6 +13,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
 
+  // ИНСТРУКЦИЯ И ОНБОРДИНГ
+  const [showInfoModal, setShowInfoModal] = useState(false);
+
   const [selectedCategory, setSelectedCategory] = useState('all'); 
   const [activeGuestTab, setActiveGuestTab] = useState('menu'); 
   const [isMenuOpen, setIsMenuOpen] = useState(false); 
@@ -58,6 +61,17 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
 
+  // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ
+  useEffect(() => {
+    if (!currentUser.isAnonymous && currentUser.phone) {
+      const hasSeen = localStorage.getItem(`onboarding_seen_${currentUser.phone}`);
+      if (!hasSeen) {
+        setShowInfoModal(true);
+        localStorage.setItem(`onboarding_seen_${currentUser.phone}`, 'true');
+      }
+    }
+  }, [currentUser]);
+
   const handleInstallClick = () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
@@ -79,7 +93,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     );
   };
 
-  const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal;
+  const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal || showInfoModal;
 
   // МЯГКИЙ ФИКС СКРОЛЛА (без зависаний)
   useEffect(() => {
@@ -102,9 +116,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     if (pendingOrderId && paymentStatus === 'processing') {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (checkOrder) {
-        if (checkOrder.status === 'new') { // Кассир подтвердил
+        if (checkOrder.status === 'new') { 
           if (checkOrder.orderType === 'booking_deposit') {
-             // Официально бронируем стол ТОЛЬКО после оплаты
              setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
              setPaymentStatus('booking_success');
           } else {
@@ -112,7 +125,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           }
           setPendingOrderId(null); 
         } 
-        else if (checkOrder.status === 'rejected') { // Кассир отклонил
+        else if (checkOrder.status === 'rejected') { 
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 
         }
@@ -138,7 +151,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const bDate = new Date();
     bDate.setHours(h, m, 0, 0);
     const diffMs = bDate.getTime() - now.getTime();
-    return diffMs > 0 && diffMs <= 7200000; // 2 часа
+    return diffMs > 0 && diffMs <= 7200000; 
   };
 
   const getEvictionTime = (timeStr) => {
@@ -156,7 +169,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     setShowTimeModal(false); 
   };
 
-  // ОТПРАВКА ЗАЛОГА КАССИРУ НА ПРОВЕРКУ
   const confirmBookingTransfer = () => {
     const newOrder = {
        id: `BKG-${Math.floor(Math.random() * 10000)}`,
@@ -240,7 +252,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const newOrder = createOrderObject('waiter_pending', waiterPhone, waiterName, 'cash');
     setOrders(prev => [newOrder, ...(prev || [])]);
     setPendingOrderId(newOrder.id);
-    setPaymentStatus('waiter_pending');
+    setPaymentStatus('processing');
   };
 
   const selectRandomWaiter = () => {
@@ -377,6 +389,60 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
          </div>
       )}
 
+      {/* --- МОДАЛЬНОЕ ОКНО ИНФОРМАЦИИ (ОНБОРДИНГ) --- */}
+      {showInfoModal && (
+        <div className="payment-overlay" onClick={() => setShowInfoModal(false)}>
+          <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'left', padding: '30px 20px', overflowY: 'auto'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+              <h2 style={{margin: 0, fontSize: '20px', color: '#111827'}}>ℹ️ Информация</h2>
+              <button onClick={() => setShowInfoModal(false)} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold'}}>✕</button>
+            </div>
+
+            {currentUser.isAnonymous ? (
+              <>
+                <p style={{color: '#111827', fontSize: '15px', lineHeight: '1.5', background: '#fef3c7', padding: '15px', borderRadius: '12px', border: '1px solid #f59e0b'}}>
+                  <b>🛠 Это тестовая версия сайта.</b><br/><br/>
+                  Если заметите какие-то баги, глюки, просим обратиться в техподдержку (в Профиле) и написать, что случилось.<br/><br/>
+                  Спасибо за внимание!
+                </p>
+                <p style={{color: '#6b7280', fontSize: '14px', lineHeight: '1.5', marginTop: '15px', textAlign: 'center'}}>
+                  <i>💡 (Если зарегистрируетесь / войдете в личный кабинет, то вам выйдет подробная инструкция, как пользоваться сайтом)</i>
+                </p>
+              </>
+            ) : (
+              <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                <p style={{color: '#111827', fontSize: '14px', lineHeight: '1.5', background: '#fef3c7', padding: '12px', borderRadius: '12px', border: '1px solid #f59e0b', margin: 0}}>
+                  <b>🛠 Это тестовая версия сайта.</b> Если заметите баги, пишите в техподдержку (в Профиле). Спасибо!
+                </p>
+                <h3 style={{margin: '5px 0 0 0', color: '#111827', fontSize: '18px'}}>📖 Инструкция для Гостя:</h3>
+                
+                <div style={{background: '#f9fafb', padding: '15px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                   <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🛒 Заказы и Доставка</p>
+                   <p style={{margin: 0, fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>Добавляйте блюда в корзину из раздела "Меню". В корзине можно выбрать: кушать в зале, забрать навынос или оформить доставку до двери.</p>
+                </div>
+
+                <div style={{background: '#f9fafb', padding: '15px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                   <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>📅 Бронь столиков</p>
+                   <p style={{margin: 0, fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>В разделе "Залы" нажмите "Бронь" и выберите время. Для подтверждения нужно оплатить залог 1000₸. Когда приедете в кафе, нажмите на свой стол и выберите <b>«🙋‍♂️ Я пришел»</b>, чтобы официант подтвердил вашу посадку.</p>
+                </div>
+
+                <div style={{background: '#f9fafb', padding: '15px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                   <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🛎 Вызов официанта и Счет</p>
+                   <p style={{margin: 0, fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>Сидя за столом, вы можете в любой момент нажать "Официант", чтобы позвать его, или попросить счет для оплаты наличными.</p>
+                </div>
+
+                <div style={{background: '#f9fafb', padding: '15px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                   <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🎁 Кэшбек</p>
+                   <p style={{margin: 0, fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>С каждого заказа вам начисляются бонусы, которые можно проверить в разделе "Профиль".</p>
+                </div>
+              </div>
+            )}
+            <button onClick={() => setShowInfoModal(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', marginTop: '15px'}}>Понятно</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ --- */}
       {showSupportModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -673,7 +739,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           </div>
         </div>
         
+        {/* НОВАЯ КНОПКА ИНФОРМАЦИИ И ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА */}
         <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+          <button onClick={() => setShowInfoModal(true)} style={{ background: '#fef3c7', border: '1px solid #f59e0b', padding: '8px 10px', borderRadius: '10px', color: '#b45309', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            ℹ️
+          </button>
           <button onClick={() => setLang(lang === 'ru' ? 'kz' : 'ru')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', padding: '8px 10px', borderRadius: '10px', color: '#111827', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
             {lang === 'ru' ? 'KZ' : 'RU'}
           </button>
@@ -880,7 +950,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         )}
       </main>
 
-      {/* ФИКС ДЫРКИ: Скрываем нижний бар при открытых модалках */}
       {!isAnyModalOpen && (
         <nav className="mobile-nav">
           <button className={`nav-item ${activeGuestTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveGuestTab('menu')}><span className="nav-icon">🍔</span> {t.menu}</button>

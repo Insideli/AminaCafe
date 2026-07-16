@@ -61,6 +61,24 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
 
+  // ИНТЕГРАЦИЯ PALOMA POS (ЗАГЛУШКА ДЛЯ ВЛАДЕЛЬЦА)
+  const sendToPaloma = async (orderData) => {
+    console.log("Заказ успешно отправлен в Paloma365:", orderData);
+    // Как только будет API ключ, раскомментируем код ниже:
+    /*
+    try {
+      await fetch('https://api.paloma365.com/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ТУТ_БУДЕТ_API_КЛЮЧ' },
+        body: JSON.stringify(orderData)
+      });
+      console.log('Печать на кухне запущена!');
+    } catch (e) {
+      console.error('Ошибка Paloma365:', e);
+    }
+    */
+  };
+
   // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ
   useEffect(() => {
     if (!currentUser.isAnonymous && currentUser.phone) {
@@ -117,6 +135,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (checkOrder) {
         if (checkOrder.status === 'new') { 
+          // Отправляем заказ в Палому на кухонный принтер, если кассир подтвердил
+          sendToPaloma(checkOrder);
+
           if (checkOrder.orderType === 'booking_deposit') {
              setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
              setPaymentStatus('booking_success');
@@ -126,7 +147,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           setPendingOrderId(null); 
         } 
         else if (checkOrder.status === 'rejected') { 
-          // Если кассир нажал "Денег нет"
+          // Кассир нажал "Денег нет" - сразу выкидываем ошибку
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 
         }
@@ -634,7 +655,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЭКРАН: ОПЛАТА ЗАЛОГА (БРОНЬ) */}
             {paymentStatus === 'kaspi_card_booking' && (
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
@@ -683,7 +703,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
                 <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Повторите попытку!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Деньги не поступили. Кассир не подтвердил перевод. Пожалуйста, проверьте и попробуйте снова.</p>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Деньги не поступили. Попробуйте еще раз или обратитесь в техподдержку.</p>
                 <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
               </div>
             )}
@@ -816,7 +836,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                               🔒 Ваш стол {table.bookedTime ? `(на ${table.bookedTime})` : ''}
                             </span>
                             
-                            {table.status === 'free' && table.bookedTime ? (
+                            {table.status === 'occupied' && table.bookedTime ? (
+                               <div style={{ background: '#eff6ff', border: '1px solid #3b82f6', padding: '10px', borderRadius: '8px', color: '#1d4ed8' }}>
+                                  <p style={{margin: '0 0 5px 0', fontSize: '18px'}}>🧹</p>
+                                  <p style={{margin: 0, fontSize: '12px', fontWeight: 'bold', lineHeight: '1.4'}}>Столик подготавливается. Не переживайте, он будет готов ровно к вашему приезду (на {table.bookedTime})!</p>
+                               </div>
+                            ) : table.status === 'free' && table.bookedTime ? (
                                <>
                                  <button onClick={() => { setIsArrivalCall(true); setWaiterCallTableId(table.id); }} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#ea580c', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 5px rgba(234,88,12,0.3)' }}>🙋‍♂️ Я пришел</button>
                                  <button onClick={() => handleFreeTable(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#dc2626', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer' }}>Отменить (без возврата 1000₸)</button>

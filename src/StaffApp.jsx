@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
-  // ВНИМАНИЕ: Все базы переведены на v12 для сброса кэша
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
@@ -11,7 +10,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
   const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
 
-  // ТЕХПОДДЕРЖКА
   const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
   const [activeSupportPhone, setActiveSupportPhone] = useState(null);
   const [supportAdminText, setSupportAdminText] = useState('');
@@ -19,7 +17,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [adminTab, setAdminTab] = useState('stats'); 
   const [newItem, setNewItem] = useState({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' });
   
-  // ФИЛЬТРЫ ДЛЯ ДИРЕКТОРА И ШЕФА
   const [adminMenuCategory, setAdminMenuCategory] = useState('all');
   const [adminStaffRole, setAdminStaffRole] = useState('all');
   const [chefMenuCategory, setChefMenuCategory] = useState('all');
@@ -39,12 +36,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showWaiterMenu, setShowWaiterMenu] = useState(false);
   const [waiterMenuCategory, setWaiterMenuCategory] = useState('all');
 
-  // Состояния для Кассира
   const [cashierTab, setCashierTab] = useState('orders'); 
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
-  // ФИКС СКРОЛЛА ДЛЯ МОДАЛОК ПЕРСОНАЛА
+  // ФИКС СКРОЛЛА ДЛЯ ПЕРСОНАЛА
   useEffect(() => {
     const isAnyModalOpen = editStaffModal || showPosModal || showWaiterMenu;
     if (isAnyModalOpen) {
@@ -174,6 +170,14 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
   };
 
+  // ФУНКЦИЯ ДЛЯ ШПАРГАЛКИ ОФИЦИАНТА
+  const getEvictionTime = (timeStr) => {
+    if (!timeStr) return '';
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(); d.setHours(h, m - 30, 0, 0);
+    return d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+  };
+
   const validOrders = (orders || []).filter(o => o.status !== 'rejected' && o.status !== 'transfer_pending' && o.status !== 'waiter_pending');
   const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
   const kaspiRevenue = validOrders.filter(o => o.payMethod === 'kaspi').reduce((sum, o) => sum + o.total, 0);
@@ -262,18 +266,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   };
 
-  // --- ПАНЕЛЬ ТЕХПОДДЕРЖКИ (ОБЩАЯ ДЛЯ АДМИНА И ТЕХПОДДЕРЖКИ) ---
   const renderSupportPanel = () => {
-    // Получаем список уникальных гостей, которые писали в поддержку
     const chatUsersMap = new Map();
     (supportChat || []).forEach(msg => { chatUsersMap.set(msg.phone, { phone: msg.phone, name: msg.name, lastTime: msg.time }); });
-    const chatUsersList = Array.from(chatUsersMap.values()).reverse(); // Последние сверху
+    const chatUsersList = Array.from(chatUsersMap.values()).reverse(); 
 
     return (
       <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
         {activeSupportPhone ? (
           <div style={{ backgroundColor: '#fff', borderRadius: '20px', border: '1px solid #d1d5db', display: 'flex', flexDirection: 'column', height: '75vh' }}>
-            {/* Шапка чата */}
             <div style={{ padding: '15px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', background: '#f9fafb', borderRadius: '20px 20px 0 0' }}>
                <button onClick={() => setActiveSupportPhone(null)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#e5e7eb', cursor: 'pointer', fontWeight: 'bold' }}>← Назад</button>
                <div>
@@ -282,7 +283,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                </div>
             </div>
             
-            {/* Сообщения */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                {(supportChat || []).filter(m => m.phone === activeSupportPhone).map(m => (
                   <div key={m.id} style={{alignSelf: m.sender === 'support' ? 'flex-end' : 'flex-start', background: m.sender === 'support' ? '#3b82f6' : '#f3f4f6', color: m.sender === 'support' ? '#fff' : '#111827', padding: '12px', borderRadius: '14px', maxWidth: '85%'}}>
@@ -292,7 +292,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                ))}
             </div>
 
-            {/* Ввод сообщения */}
             <div style={{ padding: '15px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '10px' }}>
               <input type="text" value={supportAdminText} onChange={e=>setSupportAdminText(e.target.value)} placeholder="Написать гостю..." style={{flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', boxSizing: 'border-box'}} />
               <button onClick={() => {
@@ -324,7 +323,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   };
 
-  // --- ЭКРАН ТЕХПОДДЕРЖКИ (ТВОЙ КАБИНЕТ) ---
   if (currentUser.role === 'developer') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f0fdf4', fontFamily: 'Arial', paddingBottom: '80px' }}>
@@ -566,7 +564,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     const isMyTable = t.servedBy === currentUser.phone || t.status === 'free';
                     const canManage = currentUser.isSenior || isMyTable;
                     
-                    // ЛОГИКА ОТОБРАЖЕНИЯ ВЫЗОВОВ ОТ ГОСТЕЙ
                     const isCallingMe = t.isCalling && t.calledWaiter === currentUser.phone;
                     const isCallingSomeoneElse = t.isCalling && t.calledWaiter && t.calledWaiter !== currentUser.phone;
                     const isGeneralCall = t.isCalling && !t.calledWaiter;
@@ -577,11 +574,26 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         <span style={{ fontSize: '12px', color: '#6b7280' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
                         {t.status !== 'free' && t.servedBy && <p style={{fontSize: '11px', color: '#f59e0b', margin: '4px 0 0 0', fontWeight: 'bold'}}>{roles[t.servedBy]?.name || 'Официант'}</p>}
                         
-                        {/* ПОДТВЕРЖДЕНИЕ ВЫЗОВА */}
+                        {/* ИНФОРМАЦИЯ О БРОНИ ДЛЯ ОФИЦИАНТА */}
+                        {t.bookedBy && t.status === 'free' && (
+                          <div style={{background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '6px', marginTop: '8px'}}>
+                             <p style={{margin: 0, fontWeight: 'bold', fontSize: '12px', color: '#b45309'}}>📅 Бронь на {t.bookedTime}</p>
+                             <div style={{display: 'flex', gap: '5px', marginTop: '5px'}}>
+                               <button onClick={() => alert(`Внимание! Стол в брони на ${t.bookedTime}. Предупредите гостей: вы можете сесть, но столик нужно освободить ровно в ${getEvictionTime(t.bookedTime)}, чтобы мы успели подготовить его к приезду гостей.`)} style={{flex: 1, background: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>ℹ️ Скрипт</button>
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? {...tab, bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null} : tab))} style={{flex: 1, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Штраф</button>
+                             </div>
+                          </div>
+                        )}
+
+                        {/* ПОДТВЕРЖДЕНИЕ ВЫЗОВА ИЛИ ПРИБЫТИЯ */}
                         {(isCallingMe || isGeneralCall) && (
-                          <div style={{background: '#f59e0b', color: '#fff', padding: '8px', borderRadius: '8px', marginTop: '10px', fontSize: '12px', fontWeight: 'bold'}}>
-                            🛎 Вас вызывают!
-                            <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, isCalling: false, calledWaiter: null } : tab))} style={{marginTop: '5px', padding: '5px', width: '100%', background: '#fff', color: '#f59e0b', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подошел</button>
+                          <div style={{background: t.callType === 'arrival' ? '#10b981' : '#f59e0b', color: '#fff', padding: '8px', borderRadius: '8px', marginTop: '10px', fontSize: '12px', fontWeight: 'bold'}}>
+                            {t.callType === 'arrival' ? '🙋‍♂️ Гость пришел (Бронь)!' : '🛎 Вас вызывают!'}
+                            {t.callType === 'arrival' ? (
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, isCalling: false, calledWaiter: null, callType: null, status: 'occupied', servedBy: currentUser.phone } : tab))} style={{marginTop: '5px', padding: '5px', width: '100%', background: '#fff', color: '#10b981', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить посадку</button>
+                            ) : (
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, isCalling: false, calledWaiter: null, callType: null } : tab))} style={{marginTop: '5px', padding: '5px', width: '100%', background: '#fff', color: '#f59e0b', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подошел</button>
+                            )}
                           </div>
                         )}
 
@@ -613,22 +625,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
     const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
-    // ФИЛЬТРАЦИЯ МЕНЮ ДЛЯ АДМИНА
     const displayedAdminMenu = adminMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === adminMenuCategory);
-    
-    // ФИЛЬТРАЦИЯ ПЕРСОНАЛА ДЛЯ АДМИНА
-    const staffRolesList = [
-      { id: 'all', name: 'Все' },
-      { id: 'waiter', name: 'Официанты' },
-      { id: 'cook', name: 'Повара' },
-      { id: 'cashier', name: 'Кассиры' },
-      { id: 'chef', name: 'Шефы' }
-    ];
+    const staffRolesList = [ { id: 'all', name: 'Все' }, { id: 'waiter', name: 'Официанты' }, { id: 'cook', name: 'Повара' }, { id: 'cashier', name: 'Кассиры' }, { id: 'chef', name: 'Шефы' } ];
 
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
         
-        {/* МОДАЛКА РЕДАКТИРОВАНИЯ СОТРУДНИКА */}
         {editStaffModal && (
           <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
             <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative' }}>
@@ -675,10 +677,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <button onClick={() => setAdminTab('support')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'support' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'support' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>💬 Поддержка</button>
         </div>
         
-        {/* --- ЧАТ ТЕХПОДДЕРЖКИ ДЛЯ ДИРЕКТОРА --- */}
         {adminTab === 'support' && renderSupportPanel()}
 
-        {/* --- ВЫРУЧКА ДИРЕКТОРА (НАСТОЯЩИЕ ЦИФРЫ) --- */}
         {adminTab === 'stats' && (
           <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
             <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '20px', border: '1px solid #e5e7eb', textAlign: 'center', marginBottom: '20px' }}><h2>Общая Касса:</h2><h1 style={{ color: '#10b981', fontSize: '40px', margin: '10px 0' }}>{totalRevenue} ₸</h1></div>
@@ -714,7 +714,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* --- ЗАЛЫ ДЛЯ ДИРЕКТОРА --- */}
         {adminTab === 'tables' && (
           <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
             <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>🗺 Контроль залов</h2>
@@ -760,7 +759,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* --- ОТЗЫВЫ --- */}
         {adminTab === 'reviews' && (
           <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
@@ -791,7 +789,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* --- МЕНЮ (С ФИЛЬТРОМ И ИНГРЕДИЕНТАМИ) --- */}
         {adminTab === 'menu' && (
           <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
             
@@ -808,7 +805,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
             <h3 style={{color: '#111827', marginBottom: '15px'}}>Управление меню:</h3>
             
-            {/* ФИЛЬТР КАТЕГОРИЙ ДЛЯ АДМИНА */}
             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
               {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
             </div>
@@ -816,37 +812,27 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {displayedAdminMenu.map(item => (
                 <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
-                  
-                  {/* Картинка / Смайл */}
                   <div style={{fontSize: '25px', display: 'flex', justifyContent: 'center'}}>
                     {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}
                   </div>
-                  
-                  {/* Имя и Цена */}
                   <div style={{minWidth: 0}}>
                     <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold' }}>{item.price} ₸</p>
                   </div>
-
-                  {/* Кнопка Фото */}
                   <label style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', fontSize: '12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                     📷 Фото
                     <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => handlePhotoUpload(e, item.id)} />
                   </label>
-
-                  {/* Кнопки Управления */}
                   <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
                      <button onClick={() => toggleStopList(item.id)} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
                      <button onClick={() => setMenu((menu || []).filter(m => m.id !== item.id))} style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#f3f4f6', color: '#4b5563', border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px' }}>Удалить</button>
                   </div>
-
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* --- ПЕРСОНАЛ (С ФИЛЬТРОМ) --- */}
         {adminTab === 'staff' && (
           <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
@@ -879,7 +865,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               <button onClick={handleAddWaiter} style={{ width: '100%', padding: '14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Добавить сотрудника</button>
             </div>
             
-            {/* ФИЛЬТР ПЕРСОНАЛА ДЛЯ АДМИНА */}
             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
               {staffRolesList.map(role => (<button key={role.id} onClick={() => setAdminStaffRole(role.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminStaffRole === role.id ? '#8b5cf6' : '#f3f4f6', color: adminStaffRole === role.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{role.name}</button>))}
             </div>

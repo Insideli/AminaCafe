@@ -43,6 +43,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
+  const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
+  const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
+
   // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ ПЕРСОНАЛА
   useEffect(() => {
     if (currentUser && currentUser.phone) {
@@ -239,6 +242,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                 <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>В разделе "Оплаты" вы будете видеть все переводы на карту. Обязательно сверяйте суммы с приложением банка! Здесь же будут падать залоги (1000₸) за бронь столов.</p>
              </div>
              <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🗺 Контроль залов</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Вы можете просматривать интерактивную карту залов, видеть брони, имена гостей за столами и закрепленных официантов.</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
                 <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🛒 Терминал (Навынос)</p>
                 <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Пробивайте заказы для гостей, которые пришли в заведение, чтобы забрать еду с собой, или для курьеров.</p>
              </div>
@@ -335,10 +342,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     if (pendingTransfers.length === 0) return null;
     return (
        <div style={{ backgroundColor: '#fff', border: '4px solid #f59e0b', padding: '20px', borderRadius: '24px', marginBottom: '25px', boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)' }}>
-          <h2 style={{color: '#d97706', margin: '0 0 15px 0', fontSize: '18px'}}>💳 Ожидают подтверждения перевода!</h2>
-          {pendingTransfers.map(o => (
+          <h2 style={{color: '#d97706', margin: '0 0 15px 0', fontSize: '18px'}}>💳 Ожидают подтверждения!</h2>
+          {pendingTransfers.map(o => {
+             const guestInfo = customers[o.phone] || { name: 'Гость' };
+             return (
              <div key={o.id} style={{ background: '#fef3c7', padding: '15px', borderRadius: '12px', marginBottom: '10px' }}>
-                <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}>Заказ: <b>{o.tableName}</b> перевел(а) <b style={{fontSize: '18px', color: '#b45309'}}>{o.total} ₸</b>.<br/>Проверьте поступление на карту <b>4400 4302 5493 5945</b></p>
+                <p style={{margin: '0 0 5px 0', fontSize: '15px', color: '#111827'}}>Заказ/Бронь: <b>{o.tableName}</b></p>
+                <p style={{margin: '0 0 5px 0', fontSize: '14px', color: '#4b5563'}}>Гость: <b>{guestInfo.name} ({o.phone})</b></p>
+                {o.waiterName && <p style={{margin: '0 0 10px 0', fontSize: '14px', color: '#4b5563'}}>Официант: <b>{o.waiterName}</b></p>}
+                <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}>К оплате: <b style={{fontSize: '18px', color: '#b45309'}}>{o.total} ₸</b></p>
                 <div style={{display: 'flex', gap: '10px'}}>
                    <button onClick={() => {
                        changeOrderStatus(o.id, 'new', 'kaspi');
@@ -349,7 +361,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                    <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Денег нет</button>
                 </div>
              </div>
-          ))}
+          )})}
        </div>
     );
   };
@@ -491,8 +503,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <h2>👩‍💻 Касса: {currentUser.name}</h2>
           <HeaderControls />
         </header>
+        
+        {/* НАВИГАЦИЯ КАССИРА (ДОБАВЛЕНА КАРТА ЗАЛОВ) */}
         <div style={{ display: 'flex', gap: '10px', padding: '20px', justifyContent: 'flex-start', overflowX: 'auto', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
           <button onClick={() => setCashierTab('orders')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'orders' ? '#10b981' : '#f3f4f6', color: cashierTab === 'orders' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🔔 Оплаты</button>
+          <button onClick={() => setCashierTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'tables' ? '#ec4899' : '#f3f4f6', color: cashierTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
           <button onClick={() => setCashierTab('pos')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'pos' ? '#3b82f6' : '#f3f4f6', color: cashierTab === 'pos' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🛒 Терминал</button>
           <button onClick={() => setCashierTab('report')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'report' ? '#8b5cf6' : '#f3f4f6', color: cashierTab === 'report' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 X-Отчет</button>
         </div>
@@ -501,11 +516,19 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
             <PendingTransfersBlock />
 
+            {/* Запросы счета от столов с подробной инфой */}
             {cashPendingTables.map(table => {
                const orderForTable = (orders || []).find(o => o.tableId === table.id && (o.status === 'cash_pending' || o.status === 'cooking' || o.status === 'new'));
+               const guestPhone = table.bookedBy || orderForTable?.phone;
+               const guestInfo = customers[guestPhone] || { name: 'Гость' };
+               const waiterName = table.servedBy ? roles[table.servedBy]?.name : (orderForTable?.waiterName || 'Неизвестно');
+
                return (
                  <div key={`c-bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '2px solid #dc2626', padding: '20px', borderRadius: '16px', marginBottom: '15px' }}>
-                    <h3 style={{ color: '#991b1b', margin: '0 0 10px 0' }}>🏃 Гость подошел к кассе ({table.name})</h3>
+                    <h3 style={{ color: '#991b1b', margin: '0 0 10px 0' }}>🏃 Просят счет (Наличные / Kaspi)</h3>
+                    <p style={{margin: '0 0 5px 0', fontSize: '15px', color: '#111827'}}>Стол: <b>{table.name}</b></p>
+                    <p style={{margin: '0 0 5px 0', fontSize: '14px', color: '#4b5563'}}>Гость: <b>{guestInfo.name} {guestPhone ? `(${guestPhone})` : ''}</b></p>
+                    <p style={{margin: '0 0 10px 0', fontSize: '14px', color: '#4b5563'}}>Официант: <b>{waiterName}</b></p>
                     <p style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#111827', fontWeight: 'bold' }}>К оплате: {orderForTable?.total || '?'} ₸</p>
                     <div style={{display: 'flex', gap: '10px'}}>
                       <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
@@ -513,6 +536,48 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     </div>
                  </div>
                )
+            })}
+          </div>
+        )}
+
+        {/* КАРТА ЗАЛОВ ДЛЯ КАССИРА */}
+        {cashierTab === 'tables' && (
+          <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+            <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>🗺 Контроль залов (Касса)</h2>
+            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #d1d5db' }}>
+              {tableGroupsList.map(group => (<button key={group} onClick={() => setSelectedTableGroup(group)} style={{ padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: selectedTableGroup === group ? '#111827' : '#fff', color: selectedTableGroup === group ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{group === 'all' ? 'Все залы' : group}</button>))}
+            </div>
+
+            {filteredTableGroups.map(groupName => {
+              const groupTables = (tables || []).filter(t => t.group === groupName);
+              if(groupTables.length === 0) return null;
+              return (
+                <div key={groupName} style={{ marginTop: '20px' }}>
+                  <h3 style={{ paddingBottom: '5px', borderBottom: '2px solid #d1d5db', marginBottom: '10px', color: '#111827' }}>{groupName}</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
+                    {groupTables.map(t => {
+                       const bookingCust = t.bookedBy ? customers[t.bookedBy] : null;
+                       return (
+                         <div key={t.id} style={{ padding: '15px', borderRadius: '12px', backgroundColor: '#fff', border: t.status === 'free' ? '1px solid #e5e7eb' : '2px solid #111827' }}>
+                            <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                               <p style={{ margin: 0, fontWeight: '900', fontSize: '15px', color: '#111827' }}>{t.name}</p>
+                               <span style={{ fontSize: '11px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '6px', background: t.status === 'free' ? '#f3f4f6' : '#fef3c7', color: t.status === 'free' ? '#6b7280' : '#b45309' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
+                            </div>
+                            
+                            {t.servedBy && <p style={{fontSize: '13px', color: '#4b5563', margin: '8px 0 0 0'}}>🏃‍♂️ Официант: <b>{roles[t.servedBy]?.name || 'Неизвестно'}</b></p>}
+                            
+                            {t.bookedBy && (
+                               <div style={{marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px dashed #10b981'}}>
+                                 <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#065f46', fontWeight: 'bold'}}>📅 Бронь: {t.bookedTime || 'Сейчас'}</p>
+                                 <p style={{margin: 0, fontSize: '12px', color: '#111827'}}>{bookingCust?.name || 'Гость'}<br/>{t.bookedBy}</p>
+                               </div>
+                            )}
+                         </div>
+                       )
+                    })}
+                  </div>
+                </div>
+              );
             })}
           </div>
         )}

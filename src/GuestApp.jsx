@@ -9,7 +9,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []); 
   
-  // ТЕХПОДДЕРЖКА
   const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
@@ -20,7 +19,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [selectedTableGroup, setSelectedTableGroup] = useState('all'); 
 
   const [cart, setCart] = useState({});
-  const [tipPercent, setTipPercent] = useState(0); 
   const [isPreOrderFlow, setIsPreOrderFlow] = useState(false); 
   const [preOrderTableId, setPreOrderTableId] = useState(null);
   const [showTimeModal, setShowTimeModal] = useState(false); 
@@ -29,7 +27,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [isChangingTable, setIsChangingTable] = useState(false);
   const [changingFromTableId, setChangingFromTableId] = useState(null);
   const [waiterCallTableId, setWaiterCallTableId] = useState(null);
-  const [isArrivalCall, setIsArrivalCall] = useState(false); // Для вызова "Я пришел"
+  const [isArrivalCall, setIsArrivalCall] = useState(false);
 
   const [paymentStatus, setPaymentStatus] = useState('idle'); 
   const [pendingOrderId, setPendingOrderId] = useState(null); 
@@ -63,9 +61,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const handleInstallClick = () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === 'accepted') { console.log('User accepted the install prompt'); }
-      });
+      deferredPrompt.userChoice.then((choiceResult) => {});
     } else {
       setShowIOSInstallGuide(true);
     }
@@ -85,19 +81,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal;
 
-  // ФИКС СКРОЛЛА: Блокируем скролл заднего фона и резинку при открытии модалок
+  // МЯГКИЙ ФИКС СКРОЛЛА (без зависаний)
   useEffect(() => {
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
-      document.body.style.overscrollBehavior = 'none';
     } else {
       document.body.style.overflow = 'auto';
-      document.body.style.overscrollBehavior = 'auto';
     }
-    return () => { 
-      document.body.style.overflow = 'auto'; 
-      document.body.style.overscrollBehavior = 'auto';
-    };
+    return () => { document.body.style.overflow = 'auto'; };
   }, [isAnyModalOpen]);
 
   useEffect(() => {
@@ -106,15 +97,28 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
   }, []);
 
+  // ЛОГИКА ОЖИДАНИЯ КАССИРА
   useEffect(() => {
-    if (pendingOrderId && (paymentStatus === 'processing' || paymentStatus === 'waiter_pending')) {
+    if (pendingOrderId && paymentStatus === 'processing') {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (checkOrder) {
-        if (checkOrder.status === 'new') { setPaymentStatus(checkOrder.payMethod === 'cash' ? 'cash_success' : 'success'); setPendingOrderId(null); } 
-        else if (checkOrder.status === 'rejected') { setPaymentStatus('rejected'); setPendingOrderId(null); }
+        if (checkOrder.status === 'new') { // Кассир подтвердил
+          if (checkOrder.orderType === 'booking_deposit') {
+             // Официально бронируем стол ТОЛЬКО после оплаты
+             setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
+             setPaymentStatus('booking_success');
+          } else {
+             setPaymentStatus('success'); 
+          }
+          setPendingOrderId(null); 
+        } 
+        else if (checkOrder.status === 'rejected') { // Кассир отклонил
+          setPaymentStatus('rejected'); 
+          setPendingOrderId(null); 
+        }
       }
     }
-  }, [orders, pendingOrderId, paymentStatus]);
+  }, [orders, pendingOrderId, paymentStatus, currentUser.phone]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -127,7 +131,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
   
-  // ПРОВЕРКА: БЛИЖЕ ЛИ БРОНЬ ЧЕМ НА 2 ЧАСА?
   const checkIsBlocked = (timeStr) => {
     if (!timeStr) return false;
     const now = new Date();
@@ -135,7 +138,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const bDate = new Date();
     bDate.setHours(h, m, 0, 0);
     const diffMs = bDate.getTime() - now.getTime();
-    return diffMs > 0 && diffMs <= 7200000; // 2 часа (в миллисекундах)
+    return diffMs > 0 && diffMs <= 7200000; // 2 часа
   };
 
   const getEvictionTime = (timeStr) => {
@@ -147,13 +150,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const initiateBooking = (id) => { setPreOrderTableId(id); setShowTimeModal(true); };
   
-  // НОВАЯ ЛОГИКА: ОПЛАТА 1000 ТГ ЗА БРОНЬ
   const confirmBookingTime = () => { 
     if (!bookingTime) return alert("Выберите время!"); 
     setPaymentStatus('kaspi_card_booking');
     setShowTimeModal(false); 
   };
 
+  // ОТПРАВКА ЗАЛОГА КАССИРУ НА ПРОВЕРКУ
   const confirmBookingTransfer = () => {
     const newOrder = {
        id: `BKG-${Math.floor(Math.random() * 10000)}`,
@@ -161,12 +164,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
        cartItems: [], itemsText: `Залог за бронь на ${bookingTime}`,
        total: 1000, orderType: 'booking_deposit',
        date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-       status: 'new', payMethod: 'kaspi'
+       status: 'transfer_pending', payMethod: 'kaspi', bookedTime: bookingTime
     };
     setOrders(prev => [newOrder, ...(prev || [])]);
-    // Бронь официально записывается на стол
-    setTables(prev => (prev || []).map(t => t.id === preOrderTableId ? { ...t, bookedBy: currentUser.phone, bookedTime: bookingTime, status: 'free' } : t));
-    setPaymentStatus('booking_success');
+    setPendingOrderId(newOrder.id);
+    setPaymentStatus('processing');
   };
 
   const bookTableNow = (id) => { setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false, calledWaiter: null } : t)); setOrderType('in_hall'); };
@@ -211,7 +213,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const availableBonuses = customers[currentUser?.phone]?.bonuses || 0;
 
   const createOrderObject = (statusToSet, assignedWaiterPhone = null, assignedWaiterName = null, payMethod = 'kaspi') => {
-    const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name} (x${i.quantity})`).join(', ') : "Бронь места";
+    const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name} (x${i.quantity})`).join(', ') : "Обычный заказ";
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
     return { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: currentUser.phone, tableId: activeTable?.id || orderType, tableName: activeTableName, cartItems: cartItemsArray, itemsText: text, total: totalAmount, tips: 0, isPreOrder: isPreOrderFlow, bookedTime: isPreOrderFlow ? bookingTime : null, orderType, deliveryAddress: fullAddress, date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), status: statusToSet, waiterPhone: assignedWaiterPhone, waiterName: assignedWaiterName, isReviewed: false, reviewUnlockTime: null, payMethod };
   };
@@ -280,9 +282,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; max-width: 100vw; overflow-x: hidden; background-color: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text); }
         ::-webkit-scrollbar { display: none; }
-        .app-wrapper { display: flex; flex-direction: column; width: 100%; min-height: 100vh; overflow-x: hidden; padding-bottom: 80px; position: relative; overscroll-behavior: none; }
+        .app-wrapper { display: flex; flex-direction: column; width: 100%; min-height: 100vh; overflow-x: hidden; padding-bottom: 80px; position: relative; }
         
-        .payment-overlay { position: fixed; inset: 0; height: 100dvh; background: rgba(17,24,39,0.7); z-index: 9999; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; backdrop-filter: blur(4px); overscroll-behavior: none; }
+        .payment-overlay { position: fixed; inset: 0; height: 100%; background: rgba(17,24,39,0.7); z-index: 9999; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; backdrop-filter: blur(4px); }
         .payment-modal { background: #fff; width: 100%; max-width: 500px; border-radius: 28px 28px 0 0; padding: 30px 25px; animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; display: flex; flex-direction: column; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes spinPulse { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.1); } 100% { transform: rotate(360deg) scale(1); } }
@@ -375,9 +377,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
          </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ (100DVH И ЖЕСТКАЯ ФИКСАЦИЯ) --- */}
       {showSupportModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100dvh', overscrollBehavior: 'none' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
             <div>
               <h2 style={{margin: 0, fontSize: '20px'}}>💬 Поддержка</h2>
@@ -420,7 +421,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ВЫЗОВА ОФИЦИАНТА --- */}
       {waiterCallTableId && (
         <div className="payment-overlay" onClick={() => setWaiterCallTableId(null)}>
           <div className="payment-modal" onClick={e => e.stopPropagation()}>
@@ -484,7 +484,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         <div className="payment-overlay">
           <div className="payment-modal" style={{overflowY: 'auto'}}>
             
-            {/* ЭКРАН: ВЫБОР СПОСОБА */}
             {paymentStatus === 'select_method' && (
               <>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
@@ -546,7 +545,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
                   <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
-                  <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>Безопасный перевод</h2>
+                  <h2 style={{margin: '0', fontSize: '20px', fontWeight: '900', color: '#111827'}}>Безопасный перевод</h2>
                 </div>
                 
                 <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Скопируйте номер карты и переведите точную сумму в приложении вашего банка.</p>
@@ -568,12 +567,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЭКРАН: ОПЛАТА ЗАЛОГА (БРОНЬ) */}
             {paymentStatus === 'kaspi_card_booking' && (
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
                   <button onClick={() => setPaymentStatus('idle')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
-                  <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>Оплата залога</h2>
+                  <h2 style={{margin: '0', fontSize: '20px', fontWeight: '900', color: '#111827'}}>Оплата залога</h2>
                 </div>
                 
                 <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Для подтверждения брони столика внесите залог. В случае неприбытия сумма не возвращается.</p>
@@ -595,20 +593,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {paymentStatus === 'booking_success' && (
-              <div style={{textAlign: 'center', padding: '30px 0'}}>
-                <div style={{fontSize: '70px', color: '#10b981', marginBottom: '15px'}}>✅</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#111827'}}>Бронь подтверждена!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Стол забронирован на ваше имя. Когда приедете в заведение, нажмите кнопку «🙋‍♂️ Я пришел» на карточке вашего столика.</p>
-                <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); setActiveGuestTab('table'); }} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Супер</button>
-              </div>
-            )}
-
             {paymentStatus === 'processing' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
                 <h2 style={{marginTop: '20px', color: '#111827'}}>Проверка платежа...</h2>
-                <p style={{color: '#6b7280', fontSize: '15px', padding: '0 20px'}}>Пожалуйста, подождите. Администратор проверяет поступление средств на карту.</p>
+                <p style={{color: '#6b7280', fontSize: '15px', padding: '0 20px'}}>Пожалуйста, подождите. Кассир проверяет поступление средств на карту.</p>
               </div>
             )}
 
@@ -623,9 +612,18 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#dc2626'}}>Перевод не найден</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Администратор не подтвердил получение перевода. Проверьте статус платежа в банке или обратитесь к персоналу.</p>
-                <button onClick={() => setPaymentStatus('kaspi_card')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
+                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#dc2626'}}>Оплата не найдена</h2>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Кассир не подтвердил поступление денег. Пожалуйста, проверьте перевод и попробуйте снова.</p>
+                <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
+              </div>
+            )}
+
+            {paymentStatus === 'booking_success' && (
+              <div style={{textAlign: 'center', padding: '30px 0'}}>
+                <div style={{fontSize: '70px', color: '#10b981', marginBottom: '15px'}}>✅</div>
+                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#111827'}}>Бронь подтверждена!</h2>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Стол забронирован на ваше имя. Когда приедете в заведение, нажмите кнопку «🙋‍♂️ Я пришел» на карточке вашего столика.</p>
+                <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); setActiveGuestTab('table'); }} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Супер</button>
               </div>
             )}
 
@@ -651,8 +649,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- ПЛАВАЮЩАЯ КОРЗИНА --- */}
-      {activeGuestTab !== 'cart' && totalItemsCount > 0 && (
+      {!isAnyModalOpen && totalItemsCount > 0 && activeGuestTab !== 'cart' && (
         <div style={{position: 'fixed', bottom: '85px', left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '400px', zIndex: 99}}>
            <button onClick={() => setActiveGuestTab('cart')} style={{width: '100%', padding: '16px 20px', background: '#111827', color: '#fff', borderRadius: '18px', border: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 8px 25px rgba(17,24,39,0.3)'}}>
               <span style={{display: 'flex', alignItems: 'center', gap: '10px'}}><span style={{background: '#ea580c', padding: '4px 10px', borderRadius: '10px', color: '#fff'}}>{totalItemsCount}</span> {t.inCart}</span>
@@ -661,7 +658,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* ШТОРКА ТЕЛЕФОНА */}
       <div className={`sidebar-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}></div>
       <div className={`categories-sidebar ${isMenuOpen ? 'open' : ''}`}>
         <button className="close-sidebar-btn" onClick={() => setIsMenuOpen(false)}><span>📂 {t.cats}</span> <span>✕</span></button>
@@ -708,7 +704,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                       {item.isStop ? <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '12px' }}>Стоп: {item.stopReason}</span> : <span className="food-price">{item.price} ₸</span>}
                     </div>
                     
-                    {/* КНОПКА С СЧЕТЧИКОМ */}
                     {cart[item.id] ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', borderRadius: '12px', padding: '4px', flexShrink: 0 }}>
                         <button onClick={() => removeFromCart(item.id)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#fff', color: '#111827', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>-</button>
@@ -718,11 +713,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                     ) : (
                       <button disabled={item.isStop} onClick={() => addToCart(item)} className="food-add" style={{ backgroundColor: item.isStop ? '#d1d5db' : '#111827' }}>+</button>
                     )}
-
                   </div>
                 ))}
               </div>
-
             </div>
           </div>
         )}
@@ -743,14 +736,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                         <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#111827', fontWeight: '800', lineHeight: '1.2' }}>{table.name}</h3>
                         <p style={{ fontSize: '11px', color: '#6b7280', margin: '0 0 10px 0' }}>Мест: {table.seats}</p>
                         
-                        {/* ЛОГИКА ОТОБРАЖЕНИЯ БРОНИ ДЛЯ ГОСТЕЙ */}
                         {table.bookedBy === currentUser?.phone && !currentUser.isAnonymous ? (
                           <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
                             <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>
                               🔒 Ваш стол {table.bookedTime ? `(на ${table.bookedTime})` : ''}
                             </span>
                             
-                            {/* ЕСЛИ СТОЛ ЗАБРОНИРОВАН, НО Я ЕЩЕ НЕ ПОДТВЕРЖДЕН ОФИЦИАНТОМ */}
                             {table.status === 'free' && table.bookedTime ? (
                                <>
                                  <button onClick={() => { setIsArrivalCall(true); setWaiterCallTableId(table.id); }} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#ea580c', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 5px rgba(234,88,12,0.3)' }}>🙋‍♂️ Я пришел</button>
@@ -838,7 +829,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           </div>
         )}
 
-        {/* --- ПРОФИЛЬ ГОСТЯ И ИСТОРИЯ ЗАКАЗОВ --- */}
         {activeGuestTab === 'profile' && (
           <div className="page-container">
             {currentUser.isAnonymous ? (
@@ -859,7 +849,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                    📱 {lang === 'ru' ? 'Установить приложение' : 'Қосымшаны орнату'}
                 </button>
 
-                {/* КНОПКА ТЕХПОДДЕРЖКИ */}
                 <button onClick={() => setShowSupportModal(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                    💬 {lang === 'ru' ? 'Написать разработчикам' : 'Қолдау қызметіне жазу'}
                 </button>
@@ -872,13 +861,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                          <span style={{fontWeight: '900', color: '#111827'}}>{o.tableName}</span>
                          <span style={{fontWeight: '900', color: '#10b981', fontSize: '16px'}}>{o.total} ₸</span>
                        </div>
-                       
                        <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: o.status === 'rejected' ? '#dc2626' : o.status === 'transfer_pending' ? '#f59e0b' : '#10b981'}}>
                          {o.status === 'rejected' ? (lang === 'ru' ? 'Оплата отменена' : 'Төлемнен бас тартылды') : 
                           o.status === 'transfer_pending' ? (lang === 'ru' ? 'Ожидание проверки оплаты' : 'Төлемді тексеру күтілуде') : 
                           (lang === 'ru' ? `Оплачено (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'})` : `Төленді (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Қолма-қол'})`)}
                        </p>
-
                        <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>{o.itemsText}</p>
                        <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
                           <span>{o.date}</span>
@@ -886,7 +873,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                     </div>
                   ))
                 }
-
                 <button onClick={logout} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', background: '#fff', color: '#ef4444', fontWeight: 'bold', marginTop: '20px', cursor: 'pointer' }}>{lang === 'ru' ? 'Выйти из аккаунта' : 'Аккаунттан шығу'}</button>
               </>
             )}
@@ -894,7 +880,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         )}
       </main>
 
-      {/* ФИКС ДЫРКИ: Скрываем панель, если открыта ЛЮБАЯ модалка */}
+      {/* ФИКС ДЫРКИ: Скрываем нижний бар при открытых модалках */}
       {!isAnyModalOpen && (
         <nav className="mobile-nav">
           <button className={`nav-item ${activeGuestTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveGuestTab('menu')}><span className="nav-icon">🍔</span> {t.menu}</button>

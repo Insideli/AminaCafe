@@ -89,10 +89,16 @@ function MainApp() {
     };
   }, [showAuthModal]);
 
-  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Мгновенная реакция из базы без таймеров!
+  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Теперь работает И ДЛЯ ГОСТЕЙ, И ДЛЯ ПЕРСОНАЛА!
   useEffect(() => {
-    if (isAuthenticated && currentUser.role !== 'guest' && currentUser.phone) {
-      const dbToken = roles[currentUser.phone]?.sessionToken;
+    if (isAuthenticated && currentUser.phone) {
+      let dbToken = null;
+      if (currentUser.role === 'guest') {
+        dbToken = (customers || {})[currentUser.phone]?.sessionToken;
+      } else {
+        dbToken = (roles || {})[currentUser.phone]?.sessionToken;
+      }
+
       // Если база загрузилась, и токен не совпадает — выкидываем!
       if (dbToken && currentUser.sessionToken && dbToken !== currentUser.sessionToken) {
         alert(lang === 'ru' ? "⚠️ Ваш аккаунт открыт на другом устройстве! Сессия завершена." : "⚠️ Аккаунтыңыз басқа құрылғыда ашылды! Сессия аяқталды.");
@@ -100,7 +106,7 @@ function MainApp() {
         window.location.reload();
       }
     }
-  }, [roles, currentUser, isAuthenticated, lang, setCurrentUser]);
+  }, [roles, customers, currentUser, isAuthenticated, lang, setCurrentUser]);
 
   const handlePhoneChange = (e) => {
     let val = e.target.value;
@@ -135,8 +141,13 @@ function MainApp() {
   const handleSmsSubmit = (e) => { 
     e.preventDefault(); 
     if (tempCode !== '1234') return alert(lang === 'ru' ? "❌ Проверочный код: 1234" : "❌ Тексеру коды: 1234"); 
+    
+    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2); // Токен для гостя
+
     if (authMode === 'login_guest') { 
-      setCurrentUser({ role: 'guest', phone: tempPhone, name: customers[tempPhone].name || 'Гость', station: null, sessionToken: null }); 
+      const updatedCustomers = { ...customers, [tempPhone]: { ...customers[tempPhone], sessionToken: newToken } };
+      setCustomers(updatedCustomers);
+      setCurrentUser({ role: 'guest', phone: tempPhone, name: customers[tempPhone].name || 'Гость', station: null, sessionToken: newToken }); 
       setShowAuthModal(false); 
     } else { setAuthStep('details'); } 
   };
@@ -157,8 +168,9 @@ function MainApp() {
       return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
     }
 
-    setCustomers(prev => ({ ...(prev || {}), [tempPhone]: { phone: tempPhone, name: tempName.trim(), bonuses: 500, sessionToken: null } })); 
-    setCurrentUser({ role: 'guest', phone: tempPhone, name: tempName.trim(), station: null, sessionToken: null }); 
+    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2); // Токен для нового гостя
+    setCustomers(prev => ({ ...(prev || {}), [tempPhone]: { phone: tempPhone, name: tempName.trim(), bonuses: 500, sessionToken: newToken } })); 
+    setCurrentUser({ role: 'guest', phone: tempPhone, name: tempName.trim(), station: null, sessionToken: newToken }); 
     setShowAuthModal(false);
     alert(lang === 'ru' ? "🎉 Успешно! Вам начислено 500 приветственных бонусов!" : "🎉 Сәтті өтті! Сізге 500 бонус берілді!");
   };

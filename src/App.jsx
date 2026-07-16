@@ -20,7 +20,6 @@ class ErrorBoundary extends Component {
   }
 }
 
-// Локальный хук для вечного входа (без Firebase)
 function useDeviceStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } 
@@ -38,14 +37,11 @@ function MainApp() {
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
   
-  // ВЕЧНЫЙ ВХОД ДЛЯ УСТРОЙСТВА
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
   const [lang, setLang] = useDeviceStorage('amina_lang_device', 'ru');
   const isAuthenticated = !!currentUser.phone;
 
-  // PWA: Установка на главный экран
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login_guest'); 
   const [authStep, setAuthStep] = useState('phone'); 
@@ -66,7 +62,6 @@ function MainApp() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Слушатель для установки PWA на главный экран
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -74,26 +69,9 @@ function MainApp() {
     });
   }, []);
 
-  // ЖЕСТКАЯ БЛОКИРОВКА ФОНА И РЕЗИНКИ ПРИ ОТКРЫТИИ ОКНА АВТОРИЗАЦИИ
-  useEffect(() => {
-    if (showAuthModal) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.overscrollBehavior = 'none';
-    } else {
-      document.body.style.overflow = 'auto';
-      document.body.style.overscrollBehavior = 'auto';
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-      document.body.style.overscrollBehavior = 'auto';
-    };
-  }, [showAuthModal]);
-
-  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Мгновенная реакция из базы без таймеров!
   useEffect(() => {
     if (isAuthenticated && currentUser.role !== 'guest' && currentUser.phone) {
       const dbToken = roles[currentUser.phone]?.sessionToken;
-      // Если база загрузилась, и токен не совпадает — выкидываем!
       if (dbToken && currentUser.sessionToken && dbToken !== currentUser.sessionToken) {
         alert(lang === 'ru' ? "⚠️ Ваш аккаунт открыт на другом устройстве! Сессия завершена." : "⚠️ Аккаунтыңыз басқа құрылғыда ашылды! Сессия аяқталды.");
         setCurrentUser({ role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null });
@@ -144,18 +122,11 @@ function MainApp() {
   const handleDetailsSubmit = (e) => { 
     e.preventDefault(); 
     if (!tempName.trim()) return alert(lang === 'ru' ? "Введите имя!" : "Атыңызды енгізіңіз!");
-
-    // 1. Проверка на язык (только кириллица и казахские буквы)
     const nameRegex = /^[А-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ\s\-]+$/i;
-    if (!nameRegex.test(tempName)) {
-      return alert(lang === 'ru' ? "❌ Имя должно содержать только русские или казахские буквы! Без цифр и спецсимволов." : "❌ Есімде тек орыс немесе қазақ әріптері болуы керек! Сандар мен белгілерсіз.");
-    }
+    if (!nameRegex.test(tempName)) return alert(lang === 'ru' ? "❌ Имя должно содержать только русские или казахские буквы! Без цифр и спецсимволов." : "❌ Есімде тек орыс немесе қазақ әріптері болуы керек! Сандар мен белгілерсіз.");
 
-    // 2. Проверка на уникальность (без учета регистра)
     const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim() && c.phone !== tempPhone);
-    if (nameExists) {
-      return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
-    }
+    if (nameExists) return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
 
     setCustomers(prev => ({ ...(prev || {}), [tempPhone]: { phone: tempPhone, name: tempName.trim(), bonuses: 500, sessionToken: null } })); 
     setCurrentUser({ role: 'guest', phone: tempPhone, name: tempName.trim(), station: null, sessionToken: null }); 
@@ -195,7 +166,7 @@ function MainApp() {
       }
       
       {showAuthModal && (
-        <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
+        <div style={{ position: 'fixed', inset: 0, height: '100%', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>

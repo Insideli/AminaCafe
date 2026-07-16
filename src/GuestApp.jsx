@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
-  // ВНИМАНИЕ: Все базы переведены на v12 для сброса кэша
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
@@ -83,15 +82,20 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     );
   };
 
-  // ФИКС СКРОЛЛА: Блокируем скролл заднего фона при открытии модалок
+  // ФИКС СКРОЛЛА: Блокируем скролл заднего фона и резинку при открытии модалок
   useEffect(() => {
     const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal;
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
     } else {
       document.body.style.overflow = 'auto';
+      document.body.style.overscrollBehavior = 'auto';
     }
-    return () => { document.body.style.overflow = 'auto'; };
+    return () => { 
+      document.body.style.overflow = 'auto'; 
+      document.body.style.overscrollBehavior = 'auto';
+    };
   }, [paymentStatus, showTimeModal, waiterCallTableId, reviewOrder, showIOSInstallGuide, showSupportModal]);
 
   useEffect(() => {
@@ -349,7 +353,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
          </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ (ПОЛНОЭКРАННОЕ) --- */}
+      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ (ПОЛНОЭКРАННОЕ ДЛЯ ТЕЛЕФОНОВ) --- */}
       {showSupportModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100dvh' }}>
           <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -390,7 +394,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
              <h2 style={{margin: '0 0 15px 0', color: '#111827'}}>{lang === 'ru' ? 'Выберите время' : 'Уақытты таңдаңыз'}</h2>
              <input type="time" value={bookingTime} onChange={e=>setBookingTime(e.target.value)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d5db', marginBottom: '20px', fontSize: '20px', textAlign: 'center', fontWeight: 'bold', color: '#111827'}} />
              <button onClick={confirmBookingTime} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#10b981', color: '#fff', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginBottom: '10px', fontSize: '16px'}}>{lang === 'ru' ? 'Забронировать' : 'Брондау'}</button>
-             <button onClick={() => setShowTimeModal(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '16px'}}>{lang === 'ru' ? 'Отмена' : 'Болдырмау'}</button>
+             <button onClick={() => { setShowTimeModal(false); setPreOrderTableId(null); }} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '16px'}}>{lang === 'ru' ? 'Отмена' : 'Болдырмау'}</button>
           </div>
         </div>
       )}
@@ -528,7 +532,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>Безопасный перевод</h2>
                 </div>
                 
-                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Скопируйте номер карты и переведите точную сумму в приложении вашего банка.</p>
+                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Скопируйте номер карты and переведите точную сумму в приложении вашего банка.</p>
                 
                 <div style={{background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '20px', marginBottom: '25px', textAlign: 'center'}}>
                   <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>К оплате</p>
@@ -691,7 +695,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                         <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#111827', fontWeight: '800', lineHeight: '1.2' }}>{table.name}</h3>
                         <p style={{ fontSize: '11px', color: '#6b7280', margin: '0 0 10px 0' }}>Мест: {table.seats}</p>
                         
-                        {/* ЛОГИКА ОТОБРАЖЕНИ КНОПОК */}
+                        {/* ЛОГИКА ОТОБРАЖЕНИЯ КНОПОК */}
                         {table.bookedBy === currentUser?.phone && !currentUser.isAnonymous ? (
                           <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
                             <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>🔒 Ваш стол</span>
@@ -749,7 +753,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                    <button onClick={handleGetLocation} style={{background: '#e0f2fe', color: '#0369a1', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'}}>🗺️ {lang === 'ru' ? 'По геоданным' : 'Геодеректер бойынша'}</button>
                 </div>
                 <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе картадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
                 <input type="text" placeholder={lang === 'ru' ? "Комментарий курьеру" : "Курьерге пікір"} value={address.comment} onChange={e=>setAddress({...address, comment: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
               </div>
             )}
@@ -821,22 +825,25 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         )}
       </main>
 
-      <nav className="mobile-nav">
-        <button className={`nav-item ${activeGuestTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveGuestTab('menu')}><span className="nav-icon">🍔</span> {t.menu}</button>
-        <button className={`nav-item ${activeGuestTab === 'table' ? 'active' : ''}`} onClick={() => setActiveGuestTab('table')}><span className="nav-icon">🪑</span> {t.halls}</button>
-        <button className={`nav-item ${activeGuestTab === 'cart' ? 'active' : ''}`} onClick={() => setActiveGuestTab('cart')}>
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <span className="nav-icon">🛒</span>
-            {totalItemsCount > 0 && (
-              <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 5px', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '900', border: '2px solid #fff' }}>
-                {totalItemsCount}
-              </span>
-            )}
-          </div>
-          {t.cart}
-        </button>
-        <button className={`nav-item ${activeGuestTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveGuestTab('profile')}><span className="nav-icon">👤</span> {t.profile}</button>
-      </nav>
+      {/* ФИКС ДЫРКИ: Скрываем нижний бар навигации, когда чат поддержки открыт на весь экран */}
+      {!showSupportModal && (
+        <nav className="mobile-nav">
+          <button className={`nav-item ${activeGuestTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveGuestTab('menu')}><span className="nav-icon">🍔</span> {t.menu}</button>
+          <button className={`nav-item ${activeGuestTab === 'table' ? 'active' : ''}`} onClick={() => setActiveGuestTab('table')}><span className="nav-icon">🪑</span> {t.halls}</button>
+          <button className={`nav-item ${activeGuestTab === 'cart' ? 'active' : ''}`} onClick={() => setActiveGuestTab('cart')}>
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <span className="nav-icon">🛒</span>
+              {totalItemsCount > 0 && (
+                <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 5px', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '900', border: '2px solid #fff' }}>
+                  {totalItemsCount}
+                </span>
+              )}
+            </div>
+            {t.cart}
+          </button>
+          <button className={`nav-item ${activeGuestTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveGuestTab('profile')}><span className="nav-icon">👤</span> {t.profile}</button>
+        </nav>
+      )}
     </div>
   );
 }

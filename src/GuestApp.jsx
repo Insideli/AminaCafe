@@ -111,7 +111,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
   }, []);
 
-  // ЛОГИКА ОЖИДАНИЯ КАССИРА
+  // ЛОГИКА ОЖИДАНИЯ КАССИРА И ОТКЛОНЕНИЯ ПЕРЕВОДА
   useEffect(() => {
     if (pendingOrderId && paymentStatus === 'processing') {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
@@ -126,6 +126,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           setPendingOrderId(null); 
         } 
         else if (checkOrder.status === 'rejected') { 
+          // Если кассир нажал "Денег нет"
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 
         }
@@ -633,6 +634,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
+            {/* ЭКРАН: ОПЛАТА ЗАЛОГА (БРОНЬ) */}
             {paymentStatus === 'kaspi_card_booking' && (
               <>
                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
@@ -659,6 +661,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
+            {/* ЗАГРУЗКА (ЕСЛИ ДЕНЬГИ ЕЩЕ ПРОВЕРЯЮТСЯ) */}
             {paymentStatus === 'processing' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
@@ -675,11 +678,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
+            {/* НОВЫЙ ЭКРАН ОТКЛОНЕНИЯ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#dc2626'}}>Оплата не найдена</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Кассир не подтвердил поступление денег. Пожалуйста, проверьте перевод и попробуйте снова.</p>
+                <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Повторите попытку!</h2>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Деньги не поступили. Кассир не подтвердил перевод. Пожалуйста, проверьте и попробуйте снова.</p>
                 <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
               </div>
             )}

@@ -40,19 +40,16 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
-  // ФИКС СКРОЛЛА ДЛЯ ПЕРСОНАЛА
+  // МЯГКИЙ ФИКС СКРОЛЛА
   useEffect(() => {
     const isAnyModalOpen = editStaffModal || showPosModal || showWaiterMenu;
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
-      document.body.style.overscrollBehavior = 'none';
     } else {
       document.body.style.overflow = 'auto';
-      document.body.style.overscrollBehavior = 'auto';
     }
     return () => { 
       document.body.style.overflow = 'auto'; 
-      document.body.style.overscrollBehavior = 'auto';
     };
   }, [editStaffModal, showPosModal, showWaiterMenu]);
 
@@ -170,7 +167,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
   };
 
-  // ФУНКЦИЯ ДЛЯ ШПАРГАЛКИ ОФИЦИАНТА
   const getEvictionTime = (timeStr) => {
     if (!timeStr) return '';
     const [h, m] = timeStr.split(':').map(Number);
@@ -202,7 +198,13 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
              <div key={o.id} style={{ background: '#fef3c7', padding: '15px', borderRadius: '12px', marginBottom: '10px' }}>
                 <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}>Заказ: <b>{o.tableName}</b> перевел(а) <b style={{fontSize: '18px', color: '#b45309'}}>{o.total} ₸</b>.<br/>Проверьте поступление на карту <b>4400 4302 5493 5945</b></p>
                 <div style={{display: 'flex', gap: '10px'}}>
-                   <button onClick={() => changeOrderStatus(o.id, 'new', 'kaspi')} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
+                   <button onClick={() => {
+                       changeOrderStatus(o.id, 'new', 'kaspi');
+                       // Если это был залог за бронь, жестко бронируем стол
+                       if (o.orderType === 'booking_deposit') {
+                           setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
+                       }
+                   }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                    <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Денег нет</button>
                 </div>
              </div>
@@ -214,7 +216,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const renderWaiterPosModal = () => {
     if (!showPosModal) return null; const table = (tables || []).find(t => t.id === posTableId); const posTotal = Object.values(posCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     return (
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f3f4f6', zIndex: 9999, display: 'flex', flexDirection: 'column', height: '100dvh', overscrollBehavior: 'none' }}>
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f3f4f6', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
          <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{margin: 0, fontSize: '18px'}}>📱 Касса: {table?.name}</h2><button onClick={() => setShowPosModal(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
          </div>
@@ -236,7 +238,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     if (!showWaiterMenu) return null;
     const displayedMenu = waiterMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === waiterMenuCategory);
     return (
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 9999, display: 'flex', flexDirection: 'column', height: '100dvh', overscrollBehavior: 'none' }}>
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{margin: 0, fontSize: '18px'}}>📖 Меню заведения</h2><button onClick={() => setShowWaiterMenu(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
         </div>
@@ -356,7 +358,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
             <PendingTransfersBlock />
 
-            {/* Запросы счета от столов */}
             {cashPendingTables.map(table => {
                const orderForTable = (orders || []).find(o => o.tableId === table.id && (o.status === 'cash_pending' || o.status === 'cooking' || o.status === 'new'));
                return (
@@ -432,7 +433,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   }
 
-  // ЭКРАН ШЕФ-ПОВАРА
   if (currentUser.role === 'chef') {
     const displayedChefMenu = chefMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === chefMenuCategory);
 
@@ -472,7 +472,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   }
 
-  // ЭКРАН ПОВАРА НА ЦЕХЕ
   if (currentUser.role === 'cook') {
     const myCats = STATION_MAP[currentUser.station] || [];
     const myOrders = (orders || []).filter(o => (o.status === 'new' || o.status === 'cooking' || o.status === 'cash_pending') && o.cartItems?.some(i => myCats.includes(i.category)));
@@ -503,7 +502,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   }
 
-  // ЭКРАН ОФИЦИАНТА
   if (currentUser.role === 'waiter') {
     const pickups = (orders || []).filter(o => o.status === 'ready_for_pickup' && o.orderType !== 'delivery');
     const cashPending = (orders || []).filter(o => (o.status === 'cash_pending' || o.status === 'cooking') && o.orderType === 'in_hall');
@@ -619,7 +617,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   }
 
-  // ЭКРАН АДМИНИСТРАТОРА (ДИРЕКТОРА)
   if (currentUser.role === 'admin') {
     const displayedReviews = reviewFilter === 'all' ? (reviews || []) : (reviews || []).filter(r => r.rating === parseInt(reviewFilter));
     const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
@@ -632,7 +629,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
         
         {editStaffModal && (
-          <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
             <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative' }}>
               <button onClick={() => setEditStaffModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
               <h3 style={{ margin: '0 0 20px 0', color: '#111827' }}>✏️ Редактировать профиль</h3>

@@ -46,6 +46,24 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
+  // ИНТЕГРАЦИЯ PALOMA POS (ЗАГЛУШКА ДЛЯ ВЛАДЕЛЬЦА)
+  const sendToPaloma = async (orderData) => {
+    console.log("Заказ успешно отправлен в Paloma365:", orderData);
+    // Как только будет API ключ, раскомментируем код ниже:
+    /*
+    try {
+      await fetch('https://api.paloma365.com/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ТУТ_БУДЕТ_API_КЛЮЧ' },
+        body: JSON.stringify(orderData)
+      });
+      console.log('Печать на кухне запущена!');
+    } catch (e) {
+      console.error('Ошибка Paloma365:', e);
+    }
+    */
+  };
+
   // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ ПЕРСОНАЛА
   useEffect(() => {
     if (currentUser && currentUser.phone) {
@@ -145,7 +163,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, total: total, remaining: total, tips: 0, isPreOrder: false, bookedTime: null, orderType: 'in_hall', date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: 'cash' }; 
     setOrders(prev => [newOrder, ...(prev || [])]); 
-    setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy || 'Гость', servedBy: t.servedBy || currentUser.phone, isCalling: false, calledWaiter: null } : t));
+    setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy, bookedTime: t.bookedTime, servedBy: currentUser.phone, isCalling: false, calledWaiter: null } : t));
+    
+    // Синхронизация с Paloma
+    sendToPaloma(newOrder);
+
     setShowPosModal(false); setPosCart({}); alert('Заказ отправлен на кухню!');
   };
 
@@ -166,7 +188,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
       status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: payMethod 
     };
-    setOrders(prev => [newOrder, ...(prev || [])]); setCashierCart({}); alert('Заказ оплачен и отправлен на кухню!');
+    setOrders(prev => [newOrder, ...(prev || [])]); 
+    
+    // Синхронизация с Paloma
+    sendToPaloma(newOrder);
+
+    setCashierCart({}); alert('Заказ оплачен и отправлен на кухню!');
   };
 
   const applySeniorDiscount = () => {
@@ -224,7 +251,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
              </div>
              <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
                 <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>📅 Бронь (Важно!)</p>
-                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Если стол забронирован, вы увидите плашку с временем. Когда гость придет, он нажмет "Я пришел", и у вас появится кнопка <b>"Подтвердить посадку"</b>. Если гость не пришел, нажмите <b>"Штраф"</b> (залог останется в кассе).</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Если стол забронирован, вы увидите плашку с временем. Вы можете посадить за него гостей "с улицы", нажав синюю кнопку <b>"Посадить других"</b>. Гости с бронью увидят, что их столик подготавливается.</p>
              </div>
              <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
                 <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>💸 Оплата наличными</p>
@@ -353,9 +380,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                 <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}>К оплате: <b style={{fontSize: '18px', color: '#b45309'}}>{o.total} ₸</b></p>
                 <div style={{display: 'flex', gap: '10px'}}>
                    <button onClick={() => {
+                       const updatedOrder = {...o, status: 'new', payMethod: 'kaspi'};
                        changeOrderStatus(o.id, 'new', 'kaspi');
                        if (o.orderType === 'booking_deposit') {
                            setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
+                       } else {
+                           sendToPaloma(updatedOrder);
                        }
                    }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                    <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Денег нет</button>
@@ -531,8 +561,23 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     <p style={{margin: '0 0 10px 0', fontSize: '14px', color: '#4b5563'}}>Официант: <b>{waiterName}</b></p>
                     <p style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#111827', fontWeight: 'bold' }}>К оплате: {orderForTable?.total || '?'} ₸</p>
                     <div style={{display: 'flex', gap: '10px'}}>
-                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
-                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'cash'); }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
+                      <button onClick={() => { 
+                         const updatedOrder = {...orderForTable, status: 'delivered', payMethod: 'kaspi'};
+                         setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
+                         if(orderForTable) {
+                            changeOrderStatus(orderForTable.id, 'delivered', 'kaspi');
+                            sendToPaloma(updatedOrder);
+                         } 
+                      }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
+                      
+                      <button onClick={() => { 
+                         const updatedOrder = {...orderForTable, status: 'delivered', payMethod: 'cash'};
+                         setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
+                         if(orderForTable) {
+                            changeOrderStatus(orderForTable.id, 'delivered', 'cash');
+                            sendToPaloma(updatedOrder);
+                         }
+                      }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
                     </div>
                  </div>
                )
@@ -740,7 +785,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             {(orders || []).filter(o => o.status === 'waiter_pending' && o.waiterPhone === currentUser.phone).map(o => (
                <div key={o.id} style={{ background: '#ecfdf5', padding: '15px', borderRadius: '12px', marginBottom: '10px' }}>
                   <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}><b>{o.tableName}</b> выбрал вас. К оплате: <b style={{fontSize: '18px', color: '#047857'}}>{o.total} ₸</b> (Наличные)</p>
-                  <button onClick={() => { changeOrderStatus(o.id, 'new', 'cash'); setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, servedBy: currentUser.phone } : t)); }} style={{width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Оплату принял (Отправить на кухню)</button>
+                  <button onClick={() => { 
+                     const updatedOrder = {...o, status: 'new', payMethod: 'cash'};
+                     changeOrderStatus(o.id, 'new', 'cash'); 
+                     setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, servedBy: currentUser.phone } : t)); 
+                     sendToPaloma(updatedOrder);
+                  }} style={{width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Оплату принял (Отправить на кухню)</button>
                </div>
             ))}
           </div>
@@ -783,13 +833,23 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         <span style={{ fontSize: '12px', color: '#6b7280' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
                         {t.status !== 'free' && t.servedBy && <p style={{fontSize: '11px', color: '#f59e0b', margin: '4px 0 0 0', fontWeight: 'bold'}}>{roles[t.servedBy]?.name || 'Официант'}</p>}
                         
-                        {t.bookedBy && t.status === 'free' && (
+                        {/* ИНФОРМАЦИЯ О БРОНИ ДЛЯ ОФИЦИАНТА И УМНАЯ ПОСАДКА */}
+                        {t.bookedBy && (
                           <div style={{background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '6px', marginTop: '8px'}}>
                              <p style={{margin: 0, fontWeight: 'bold', fontSize: '12px', color: '#b45309'}}>📅 Бронь на {t.bookedTime}</p>
-                             <div style={{display: 'flex', gap: '5px', marginTop: '5px'}}>
-                               <button onClick={() => alert(`Внимание! Стол в брони на ${t.bookedTime}. Предупредите гостей: вы можете сесть, но столик нужно освободить ровно в ${getEvictionTime(t.bookedTime)}, чтобы мы успели подготовить его к приезду гостей.`)} style={{flex: 1, background: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>ℹ️ Скрипт</button>
-                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? {...tab, bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null} : tab))} style={{flex: 1, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Штраф</button>
-                             </div>
+                             <p style={{margin: '2px 0 0 0', fontSize: '11px', color: '#111827'}}>{customers[t.bookedBy]?.name || 'Гость'} ({t.bookedBy})</p>
+                             
+                             {t.status === 'free' ? (
+                                 <div style={{display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '5px'}}>
+                                   <div style={{display: 'flex', gap: '5px'}}>
+                                     <button onClick={() => alert(`Внимание! Стол в брони на ${t.bookedTime}. Предупредите гостей: вы можете сесть, но столик нужно освободить ровно в ${getEvictionTime(t.bookedTime)}, чтобы мы успели подготовить его к приезду гостей.`)} style={{flex: 1, background: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>ℹ️ Скрипт</button>
+                                     <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? {...tab, bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null} : tab))} style={{flex: 1, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Штраф</button>
+                                   </div>
+                                   <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? {...tab, status: 'occupied', servedBy: currentUser.phone} : tab))} style={{width: '100%', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer'}}>👥 Посадить других (до {getEvictionTime(t.bookedTime)})</button>
+                                 </div>
+                             ) : (
+                                 <p style={{margin: '5px 0 0 0', fontSize: '11px', color: '#dc2626', fontWeight: 'bold'}}>⚠️ Освободить до {getEvictionTime(t.bookedTime)}!</p>
+                             )}
                           </div>
                         )}
 
@@ -810,9 +870,19 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                           </div>
                         )}
                         
-                        <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
-                          <button disabled={!canManage} onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ flex: 1, minWidth: 0, padding: '8px', background: canManage ? '#111827' : '#9ca3af', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: canManage ? 'pointer' : 'not-allowed' }}>+ Чек</button>
-                          {t.status !== 'free' && canManage && <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ padding: '8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>X</button>}
+                        <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap' }}>
+                          <button disabled={!canManage} onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ flex: 1, minWidth: '100%', padding: '8px', background: canManage ? '#111827' : '#9ca3af', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: canManage ? 'pointer' : 'not-allowed' }}>+ Чек</button>
+                          
+                          {t.status !== 'free' && canManage && (
+                             t.bookedTime ? (
+                                <>
+                                  <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ width: '100%', padding: '8px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>🧹 Освободить (Бронь останется)</button>
+                                  <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, bookedTime: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ width: '100%', padding: '8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>Завершить бронь полностью</button>
+                                </>
+                             ) : (
+                                <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, bookedTime: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ width: '100%', padding: '8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>❌ Освободить стол</button>
+                             )
+                          )}
                         </div>
                       </div>
                     )

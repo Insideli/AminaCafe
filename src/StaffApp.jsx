@@ -14,6 +14,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [activeSupportPhone, setActiveSupportPhone] = useState(null);
   const [supportAdminText, setSupportAdminText] = useState('');
 
+  // ОНБОРДИНГ И ИНСТРУКЦИИ ДЛЯ ПЕРСОНАЛА
+  const [showInfoModal, setShowInfoModal] = useState(false);
+
   const [adminTab, setAdminTab] = useState('stats'); 
   const [newItem, setNewItem] = useState({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' });
   
@@ -40,18 +43,27 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
+  // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ ПЕРСОНАЛА
+  useEffect(() => {
+    if (currentUser && currentUser.phone) {
+      const hasSeen = localStorage.getItem(`onboarding_seen_${currentUser.phone}`);
+      if (!hasSeen) {
+        setShowInfoModal(true);
+        localStorage.setItem(`onboarding_seen_${currentUser.phone}`, 'true');
+      }
+    }
+  }, [currentUser]);
+
   // МЯГКИЙ ФИКС СКРОЛЛА
   useEffect(() => {
-    const isAnyModalOpen = editStaffModal || showPosModal || showWaiterMenu;
+    const isAnyModalOpen = editStaffModal || showPosModal || showWaiterMenu || showInfoModal;
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
     }
-    return () => { 
-      document.body.style.overflow = 'auto'; 
-    };
-  }, [editStaffModal, showPosModal, showWaiterMenu]);
+    return () => { document.body.style.overflow = 'auto'; };
+  }, [editStaffModal, showPosModal, showWaiterMenu, showInfoModal]);
 
   useEffect(() => {
     const sync = (e) => {
@@ -131,7 +143,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const newOrder = { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, total: total, remaining: total, tips: 0, isPreOrder: false, bookedTime: null, orderType: 'in_hall', date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: 'cash' }; 
     setOrders(prev => [newOrder, ...(prev || [])]); 
     setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy || 'Гость', servedBy: t.servedBy || currentUser.phone, isCalling: false, calledWaiter: null } : t));
-    setShowPosModal(false); setPosCart({}); alert('Заказ отправлен на принтер кухни!');
+    setShowPosModal(false); setPosCart({}); alert('Заказ отправлен на кухню!');
   };
 
   const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }));
@@ -179,14 +191,144 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const kaspiRevenue = validOrders.filter(o => o.payMethod === 'kaspi').reduce((sum, o) => sum + o.total, 0);
   const cashRevenue = validOrders.filter(o => o.payMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
 
+  // ШАПКА ПЕРСОНАЛА С КНОПКОЙ ИНФОРМАЦИИ
   const HeaderControls = () => (
     <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+      <button onClick={() => setShowInfoModal(true)} style={{ background: '#fef3c7', border: '1px solid #f59e0b', padding: '6px 8px', borderRadius: '8px', color: '#b45309', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        ℹ️
+      </button>
       <button onClick={() => setLang(lang === 'ru' ? 'kz' : 'ru')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', padding: '6px 8px', borderRadius: '8px', color: '#111827', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>
         {lang === 'ru' ? 'KZ' : 'RU'}
       </button>
       <button onClick={logout} style={{ background: '#ef4444', border: 'none', color: '#fff', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontWeight: 'bold' }}>{lang === 'ru' ? 'Выход' : 'Шығу'}</button>
     </div>
   );
+
+  // КОМПОНЕНТ ОБУЧЕНИЯ (ОНБОРДИНГА)
+  const renderInfoModal = () => {
+    if (!showInfoModal) return null;
+    let roleTitle = '';
+    let instructions = null;
+
+    switch(currentUser.role) {
+      case 'waiter':
+        roleTitle = 'Официант';
+        instructions = (
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🛎 Вызовы и Столы</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Оранжевые столы — вас вызывают. Следите за статусами залов и принимайте заказы через кнопку "+ Чек".</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>📅 Бронь (Важно!)</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Если стол забронирован, вы увидите плашку с временем. Когда гость придет, он нажмет "Я пришел", и у вас появится кнопка <b>"Подтвердить посадку"</b>. Если гость не пришел, нажмите <b>"Штраф"</b> (залог останется в кассе).</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>💸 Оплата наличными</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Если гость выбрал оплату наличными, подойдите к нему, заберите деньги и нажмите "Оплату принял", чтобы чек ушел на кухню.</p>
+             </div>
+          </div>
+        );
+        break;
+      case 'cashier':
+        roleTitle = 'Кассир';
+        instructions = (
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>💳 Переводы Kaspi и Бронь</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>В разделе "Оплаты" вы будете видеть все переводы на карту. Обязательно сверяйте суммы с приложением банка! Здесь же будут падать залоги (1000₸) за бронь столов.</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🛒 Терминал (Навынос)</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Пробивайте заказы для гостей, которые пришли в заведение, чтобы забрать еду с собой, или для курьеров.</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>📊 X-Отчет</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>В конце смены проверяйте общую кассу (сколько пришло на Kaspi, а сколько лежит наличными в ящике).</p>
+             </div>
+          </div>
+        );
+        break;
+      case 'chef':
+        roleTitle = 'Шеф-Повар';
+        instructions = (
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>⛔ Стоп-лист</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Если ингредиенты закончились, быстро отправляйте блюдо в стоп-лист, чтобы гости не могли его заказать.</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>📷 Фотографии блюд</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Вы можете загружать красивые фотографии прямо с телефона для каждого блюда в меню.</p>
+             </div>
+          </div>
+        );
+        break;
+      case 'cook':
+        roleTitle = `Повар (${currentUser.station})`;
+        instructions = (
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🔥 Приготовление заказов</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Вам будут падать только те чеки, которые относятся к вашему цеху. Нажимайте "Начать готовить", а затем "Готово / Отдать", чтобы официант забрал заказ.</p>
+             </div>
+          </div>
+        );
+        break;
+      case 'admin':
+        roleTitle = 'Директор';
+        instructions = (
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>📊 Финансы и Отзывы</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Контролируйте общую выручку по всем залам и способам оплаты. Читайте отзывы гостей на работу персонала.</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>👥 Управление персоналом</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Добавляйте новых официантов, поваров и кассиров. Назначайте старших и блокируйте доступ вне смены.</p>
+             </div>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>🗺 Контроль залов</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Следите за посадкой. Вы можете вручную освобождать столы или проверять брони.</p>
+             </div>
+          </div>
+        );
+        break;
+      case 'developer':
+        roleTitle = 'Техподдержка';
+        instructions = (
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+             <div style={{background: '#f9fafb', padding: '12px', borderRadius: '12px', border: '1px solid #e5e7eb'}}>
+                <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>💬 Тикеты от гостей</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#4b5563'}}>Отвечайте на баг-репорты и предложения от гостей в режиме реального времени.</p>
+             </div>
+          </div>
+        );
+        break;
+      default:
+        break;
+    }
+
+    return (
+      <div style={{ position: 'fixed', inset: 0, height: '100%', background: 'rgba(17,24,39,0.7)', zIndex: 9999, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', backdropFilter: 'blur(4px)' }} onClick={() => setShowInfoModal(false)}>
+        <div style={{ background: '#fff', width: '100%', maxWidth: '500px', borderRadius: '28px 28px 0 0', padding: '30px 25px', boxSizing: 'border-box', maxHeight: '90vh', display: 'flex', flexDirection: 'column', textAlign: 'left', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
+            <h2 style={{margin: 0, fontSize: '20px', color: '#111827'}}>ℹ️ Обучение</h2>
+            <button onClick={() => setShowInfoModal(false)} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold'}}>✕</button>
+          </div>
+          
+          <p style={{color: '#111827', fontSize: '14px', lineHeight: '1.5', background: '#fef3c7', padding: '12px', borderRadius: '12px', border: '1px solid #f59e0b', margin: '0 0 15px 0'}}>
+            <b>🛠 Это тестовая версия сайта.</b> Если заметите баги или глюки, сообщите в техподдержку.
+          </p>
+          
+          <h3 style={{margin: '0 0 10px 0', color: '#111827', fontSize: '18px'}}>📖 Инструкция ({roleTitle}):</h3>
+          {instructions}
+
+          <button onClick={() => setShowInfoModal(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', marginTop: '15px'}}>Приступить к работе</button>
+        </div>
+      </div>
+    );
+  };
 
   const PendingTransfersBlock = () => {
     const pendingTransfers = (orders || []).filter(o => o.status === 'transfer_pending');
@@ -200,7 +342,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                 <div style={{display: 'flex', gap: '10px'}}>
                    <button onClick={() => {
                        changeOrderStatus(o.id, 'new', 'kaspi');
-                       // Если это был залог за бронь, жестко бронируем стол
                        if (o.orderType === 'booking_deposit') {
                            setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
                        }
@@ -328,6 +469,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   if (currentUser.role === 'developer') {
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f0fdf4', fontFamily: 'Arial', paddingBottom: '80px' }}>
+        {renderInfoModal()}
         <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2>👨‍💻 Техподдержка</h2>
           <HeaderControls />
@@ -344,6 +486,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
+        {renderInfoModal()}
         <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>👩‍💻 Касса: {currentUser.name}</h2>
           <HeaderControls />
@@ -438,6 +581,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial' }}>
+        {renderInfoModal()}
         <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>👨‍🍳 Шеф: {currentUser.name}</h2>
           <HeaderControls />
@@ -480,6 +624,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#fffbeb', fontFamily: 'Arial' }}>
+        {renderInfoModal()}
         <header style={{ backgroundColor: '#f59e0b', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>👨‍🍳 {currentUser.name} ({myStationName})</h2>
           <HeaderControls />
@@ -513,6 +658,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       <div style={{ minHeight: '100vh', backgroundColor: '#f0fdf4', fontFamily: 'Arial', paddingBottom: '50px' }}>
         {showPosModal && renderWaiterPosModal()}
         {renderWaiterMenuModal()}
+        {renderInfoModal()}
 
         <header style={{ backgroundColor: '#10b981', padding: '20px', color: '#fff', display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -572,7 +718,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         <span style={{ fontSize: '12px', color: '#6b7280' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
                         {t.status !== 'free' && t.servedBy && <p style={{fontSize: '11px', color: '#f59e0b', margin: '4px 0 0 0', fontWeight: 'bold'}}>{roles[t.servedBy]?.name || 'Официант'}</p>}
                         
-                        {/* ИНФОРМАЦИЯ О БРОНИ ДЛЯ ОФИЦИАНТА */}
                         {t.bookedBy && t.status === 'free' && (
                           <div style={{background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '6px', marginTop: '8px'}}>
                              <p style={{margin: 0, fontWeight: 'bold', fontSize: '12px', color: '#b45309'}}>📅 Бронь на {t.bookedTime}</p>
@@ -583,7 +728,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                           </div>
                         )}
 
-                        {/* ПОДТВЕРЖДЕНИЕ ВЫЗОВА ИЛИ ПРИБЫТИЯ */}
                         {(isCallingMe || isGeneralCall) && (
                           <div style={{background: t.callType === 'arrival' ? '#10b981' : '#f59e0b', color: '#fff', padding: '8px', borderRadius: '8px', marginTop: '10px', fontSize: '12px', fontWeight: 'bold'}}>
                             {t.callType === 'arrival' ? '🙋‍♂️ Гость пришел (Бронь)!' : '🛎 Вас вызывают!'}
@@ -627,7 +771,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
-        
+        {renderInfoModal()}
         {editStaffModal && (
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
             <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative' }}>

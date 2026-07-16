@@ -44,6 +44,22 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
+  // ФИКС СКРОЛЛА ДЛЯ МОДАЛОК ПЕРСОНАЛА
+  useEffect(() => {
+    const isAnyModalOpen = editStaffModal || showPosModal || showWaiterMenu;
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+    } else {
+      document.body.style.overflow = 'auto';
+      document.body.style.overscrollBehavior = 'auto';
+    }
+    return () => { 
+      document.body.style.overflow = 'auto'; 
+      document.body.style.overscrollBehavior = 'auto';
+    };
+  }, [editStaffModal, showPosModal, showWaiterMenu]);
+
   useEffect(() => {
     const sync = (e) => {
       try {
@@ -194,7 +210,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const renderWaiterPosModal = () => {
     if (!showPosModal) return null; const table = (tables || []).find(t => t.id === posTableId); const posTotal = Object.values(posCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     return (
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f3f4f6', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f3f4f6', zIndex: 9999, display: 'flex', flexDirection: 'column', height: '100dvh', overscrollBehavior: 'none' }}>
          <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{margin: 0, fontSize: '18px'}}>📱 Касса: {table?.name}</h2><button onClick={() => setShowPosModal(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
          </div>
@@ -216,7 +232,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     if (!showWaiterMenu) return null;
     const displayedMenu = waiterMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === waiterMenuCategory);
     return (
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 9999, display: 'flex', flexDirection: 'column', height: '100dvh', overscrollBehavior: 'none' }}>
         <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{margin: 0, fontSize: '18px'}}>📖 Меню заведения</h2><button onClick={() => setShowWaiterMenu(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
         </div>
@@ -614,7 +630,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         
         {/* МОДАЛКА РЕДАКТИРОВАНИЯ СОТРУДНИКА */}
         {editStaffModal && (
-          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
+          <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
             <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative' }}>
               <button onClick={() => setEditStaffModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
               <h3 style={{ margin: '0 0 20px 0', color: '#111827' }}>✏️ Редактировать профиль</h3>

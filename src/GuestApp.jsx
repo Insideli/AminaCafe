@@ -1,144 +1,170 @@
 import React, { useState, useEffect } from 'react';
-import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
+import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
-export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
+export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []); 
-  
+  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []);
+  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
+  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
+
   const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
-  const [showSupportModal, setShowSupportModal] = useState(false);
-  const [supportText, setSupportText] = useState('');
+  const [activeSupportPhone, setActiveSupportPhone] = useState(null);
+  const [supportAdminText, setSupportAdminText] = useState('');
 
-  const [selectedCategory, setSelectedCategory] = useState('all'); 
-  const [activeGuestTab, setActiveGuestTab] = useState('menu'); 
-  const [isMenuOpen, setIsMenuOpen] = useState(false); 
+  const [adminTab, setAdminTab] = useState('stats'); 
+  const [newItem, setNewItem] = useState({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' });
+  
+  const [adminMenuCategory, setAdminMenuCategory] = useState('all');
+  const [adminStaffRole, setAdminStaffRole] = useState('all');
+  const [chefMenuCategory, setChefMenuCategory] = useState('all');
+  
+  const [editStaffModal, setEditStaffModal] = useState(false);
+  const [editStaffOriginalPhone, setEditStaffOriginalPhone] = useState('');
+  const [editStaffData, setEditStaffData] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', station: 'hot', isSenior: false, onShift: true, kaspi: '' });
+
+  const [newWaiter, setNewWaiter] = useState({ phone: '', name: '', schedule: '', kaspi: '', role: 'waiter', password: '', station: 'hot', isSenior: false });
+  
+  const [showPosModal, setShowPosModal] = useState(false); 
+  const [posTableId, setPosTableId] = useState(null);
+  const [posCart, setPosCart] = useState({});
   const [selectedTableGroup, setSelectedTableGroup] = useState('all'); 
+  const [reviewFilter, setReviewFilter] = useState('all');
 
-  const [cart, setCart] = useState({});
-  const [isPreOrderFlow, setIsPreOrderFlow] = useState(false); 
-  const [preOrderTableId, setPreOrderTableId] = useState(null);
-  const [showTimeModal, setShowTimeModal] = useState(false); 
-  const [bookingTime, setBookingTime] = useState('19:00');
-  
-  const [isChangingTable, setIsChangingTable] = useState(false);
-  const [changingFromTableId, setChangingFromTableId] = useState(null);
-  const [waiterCallTableId, setWaiterCallTableId] = useState(null);
-  const [isArrivalCall, setIsArrivalCall] = useState(false);
+  const [showWaiterMenu, setShowWaiterMenu] = useState(false);
+  const [waiterMenuCategory, setWaiterMenuCategory] = useState('all');
 
-  const [paymentStatus, setPaymentStatus] = useState('idle'); 
-  const [pendingOrderId, setPendingOrderId] = useState(null); 
-  
-  const [orderType, setOrderType] = useState('in_hall'); 
-  const [address, setAddress] = useState({ street: '', house: '', apt: '', comment: '' });
+  const [cashierTab, setCashierTab] = useState('orders'); 
+  const [cashierCart, setCashierCart] = useState({});
+  const [cashierOrderType, setCashierOrderType] = useState('takeaway');
 
-  const [reviewOrder, setReviewOrder] = useState(null);
-  const [reviewRating, setReviewRating] = useState(0);
-  const [reviewText, setReviewText] = useState('');
-
-  const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
-
-  const t = {
-    menu: lang === 'ru' ? 'Меню' : 'Мәзір',
-    halls: lang === 'ru' ? 'Залы' : 'Залдар',
-    cart: lang === 'ru' ? 'Корзина' : 'Себет',
-    profile: lang === 'ru' ? 'Профиль' : 'Профиль',
-    inCart: lang === 'ru' ? 'В корзине' : 'Себетте',
-    pay: lang === 'ru' ? 'Оплатить' : 'Төлеу',
-    inHall: lang === 'ru' ? 'В зале' : 'Залда',
-    takeaway: lang === 'ru' ? 'Навынос' : 'Өзімен алып кету',
-    delivery: lang === 'ru' ? 'Доставка' : 'Жеткізу',
-    cats: lang === 'ru' ? 'Категории' : 'Санаттар',
-    allHalls: lang === 'ru' ? 'Все залы' : 'Барлық залдар',
-    emptyCart: lang === 'ru' ? 'Корзина пуста' : 'Себет бос',
-    orderHistory: lang === 'ru' ? 'История заказов' : 'Тапсырыстар тарихы',
-    noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
-  };
-
-  const handleInstallClick = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult) => {});
-    } else {
-      setShowIOSInstallGuide(true);
-    }
-  };
-
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) return alert("Геолокация не поддерживается вашим устройством");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const link = `https://www.google.com/maps?q=${position.coords.latitude},${position.coords.longitude}`;
-        setAddress(prev => ({ ...prev, street: link, comment: prev.comment || 'Координаты по GPS' }));
-        alert("📍 Местоположение успешно определено!");
-      },
-      () => alert("Не удалось получить геоданные. Разрешите доступ в настройках браузера.")
-    );
-  };
-
-  const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal;
-
-  // МЯГКИЙ ФИКС СКРОЛЛА (без зависаний)
+  // МЯГКИЙ ФИКС СКРОЛЛА
   useEffect(() => {
+    const isAnyModalOpen = editStaffModal || showPosModal || showWaiterMenu;
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
     }
-    return () => { document.body.style.overflow = 'auto'; };
-  }, [isAnyModalOpen]);
+    return () => { 
+      document.body.style.overflow = 'auto'; 
+    };
+  }, [editStaffModal, showPosModal, showWaiterMenu]);
 
   useEffect(() => {
-    let meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) { meta = document.createElement('meta'); meta.name = "viewport"; document.head.appendChild(meta); }
-    meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
+    const sync = (e) => {
+      try {
+        if (!e.newValue) return; const parsed = JSON.parse(e.newValue);
+        if (e.key === 'amina_orders_v12') setOrders(parsed || []); if (e.key === 'amina_tables_v12') setTables(parsed || []);
+        if (e.key === 'amina_menu_v12') setMenu(parsed || []); if (e.key === 'amina_roles_v12') setRoles(parsed || {});
+        if (e.key === 'amina_reviews_v12') setReviews(parsed || []); if (e.key === 'amina_analytics_v12') setAnalytics(parsed || { qr:0, link:0 });
+        if (e.key === 'amina_customers_v12') setCustomers(parsed || {});
+        if (e.key === 'amina_support_v12') setSupportChat(parsed || []);
+      } catch (err) {}
+    };
+    window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync);
   }, []);
 
-  // ЛОГИКА ОЖИДАНИЯ КАССИРА
-  useEffect(() => {
-    if (pendingOrderId && paymentStatus === 'processing') {
-      const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
-      if (checkOrder) {
-        if (checkOrder.status === 'new') { // Кассир подтвердил
-          if (checkOrder.orderType === 'booking_deposit') {
-             // Официально бронируем стол ТОЛЬКО после оплаты
-             setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
-             setPaymentStatus('booking_success');
-          } else {
-             setPaymentStatus('success'); 
-          }
-          setPendingOrderId(null); 
-        } 
-        else if (checkOrder.status === 'rejected') { // Кассир отклонил
-          setPaymentStatus('rejected'); 
-          setPendingOrderId(null); 
-        }
-      }
-    }
-  }, [orders, pendingOrderId, paymentStatus, currentUser.phone]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-       if (currentUser?.isAnonymous || reviewOrder) return;
-       const orderToReview = (orders || []).find(o => o.phone === currentUser?.phone && o.reviewUnlockTime && Date.now() >= o.reviewUnlockTime && !o.isReviewed);
-       if (orderToReview) setReviewOrder(orderToReview);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [orders, currentUser, reviewOrder]);
-
+  const changeOrderStatus = (id, status, payMethod = null) => setOrders(prev => (prev || []).map(o => o.id === id ? { ...o, status, payMethod: payMethod || o.payMethod, reviewUnlockTime: status === 'new' ? Date.now() + (22 * 60 * 1000) : o.reviewUnlockTime } : o));
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
+
+  const toggleStopList = (id) => {
+    const item = (menu || []).find(m => m.id === id);
+    if (!item) return;
+    if (item.isStop) { setMenu(prev => (prev || []).map(m => m.id === id ? { ...m, isStop: false, stopReason: "" } : m)); } 
+    else { const reason = prompt(`Укажите причину стопа для "${item.name}":`, "Закончились ингредиенты"); if (reason !== null) setMenu(prev => (prev || []).map(m => m.id === id ? { ...m, isStop: true, stopReason: reason } : m)); }
+  };
+
+  const handleAddMenuItem = () => { if(!newItem.name || !newItem.price) return alert("Заполните название и цену!"); setMenu(prev => [{ ...newItem, id: 'm' + Date.now(), price: Number(newItem.price), imgUrl: "", isStop: false, stopReason: "" }, ...(prev || [])]); setNewItem({ name: '', price: '', category: 'hot', ingredients: '', img: '🍔' }); alert("Блюдо добавлено!"); };
   
-  const checkIsBlocked = (timeStr) => {
-    if (!timeStr) return false;
-    const now = new Date();
-    const [h, m] = timeStr.split(':').map(Number);
-    const bDate = new Date();
-    bDate.setHours(h, m, 0, 0);
-    const diffMs = bDate.getTime() - now.getTime();
-    return diffMs > 0 && diffMs <= 7200000; // 2 часа
+  const handlePhotoUpload = (e, id) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => { setMenu(prev => (prev || []).map(m => m.id === id ? { ...m, imgUrl: event.target.result } : m)); alert("Фотография успешно загружена!"); };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddWaiter = () => { 
+    if(!newWaiter.phone || !newWaiter.name || !newWaiter.password) return alert("Заполните логин (номер) и пароль!"); 
+    setRoles(prev => ({ ...(prev || {}), [newWaiter.phone]: { role: newWaiter.role, name: newWaiter.name, schedule: newWaiter.schedule, onShift: true, password: newWaiter.password, station: newWaiter.role === 'cook' ? newWaiter.station : null, isSenior: newWaiter.role === 'waiter' ? newWaiter.isSenior : false, sessionToken: null }})); 
+    setNewWaiter({ phone: '', name: '', schedule: '', kaspi: '', role: 'waiter', password: '', station: 'hot', isSenior: false }); 
+    alert("Сотрудник добавлен!"); 
+  };
+  
+  const openEditStaffModal = (phone, data) => {
+    setEditStaffOriginalPhone(phone);
+    setEditStaffData({ ...data, phone: phone });
+    setEditStaffModal(true);
+  };
+
+  const handleSaveStaff = () => {
+    if(!editStaffData.phone || !editStaffData.name || !editStaffData.password) return alert("Логин, имя и пароль обязательны!");
+    setRoles(prev => {
+      const updated = { ...(prev || {}) };
+      if (editStaffOriginalPhone !== editStaffData.phone) { delete updated[editStaffOriginalPhone]; }
+      updated[editStaffData.phone] = { 
+         role: editStaffData.role, name: editStaffData.name, schedule: editStaffData.schedule, 
+         onShift: editStaffData.onShift, password: editStaffData.password, 
+         station: editStaffData.role === 'cook' ? editStaffData.station : null, 
+         isSenior: editStaffData.role === 'waiter' ? editStaffData.isSenior : false, 
+         sessionToken: updated[editStaffOriginalPhone]?.sessionToken || null 
+      };
+      return updated;
+    });
+    setEditStaffModal(false);
+    alert("Изменения сохранены!");
+  };
+
+  const toggleWaiterShift = (phone) => setRoles(prev => ({ ...(prev || {}), [phone]: { ...(prev || {})[phone], onShift: !(prev || {})[phone]?.onShift } }));
+
+  const addToPosCart = (item) => setPosCart(prev => ({ ...(prev || {}), [item.id]: { ...item, quantity: ((prev || {})[item.id]?.quantity || 0) + 1 } }));
+  const removeFromPosCart = (id) => { setPosCart(prev => { const updated = { ...(prev || {}) }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; }); };
+  
+  const submitPosOrder = () => {
+    const cartArray = Object.values(posCart || {}); if (cartArray.length === 0) return alert('Выберите блюда!');
+    const table = (tables || []).find(t => t.id === posTableId); 
+    const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
+    const newOrder = { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'waiter-' + currentUser.phone, tableId: table?.id, tableName: table?.name, cartItems: cartArray, itemsText: text, total: total, remaining: total, tips: 0, isPreOrder: false, bookedTime: null, orderType: 'in_hall', date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: 'cash' }; 
+    setOrders(prev => [newOrder, ...(prev || [])]); 
+    setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy || 'Гость', servedBy: t.servedBy || currentUser.phone, isCalling: false, calledWaiter: null } : t));
+    setShowPosModal(false); setPosCart({}); alert('Заказ отправлен на принтер кухни!');
+  };
+
+  const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }));
+  const removeFromCashierCart = (id) => { setCashierCart(prev => { const updated = { ...prev }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; }); };
+  
+  const submitCashierOrder = (payMethod) => {
+    const cartArray = Object.values(cashierCart || {}); 
+    if (cartArray.length === 0) return alert('Выберите блюда!');
+    const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
+    
+    const newOrder = { 
+      id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'cashier-' + currentUser.phone, tableId: 'cashier', 
+      tableName: cashierOrderType === 'takeaway' ? 'Навынос (Касса)' : 'Доставка (Касса)', 
+      cartItems: cartArray, itemsText: text, total: total, remaining: total, tips: 0, 
+      isPreOrder: false, bookedTime: null, orderType: cashierOrderType, 
+      date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
+      status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: payMethod 
+    };
+    setOrders(prev => [newOrder, ...(prev || [])]); setCashierCart({}); alert('Заказ оплачен и отправлен на кухню!');
+  };
+
+  const applySeniorDiscount = () => {
+    const cartArray = Object.values(posCart || {});
+    const currentTotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    if (currentTotal <= 0) return;
+    const discountAmount = Math.round(currentTotal * 0.1);
+    setPosCart(prev => ({ ...prev, 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
+  };
+
+  const renderTextWithLinks = (text) => {
+    if (!text) return null; const parts = text.split(/(https?:\/\/[^\s]+)/g);
+    return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
   };
 
   const getEvictionTime = (timeStr) => {
@@ -148,649 +174,581 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     return d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
   };
 
-  const initiateBooking = (id) => { setPreOrderTableId(id); setShowTimeModal(true); };
-  
-  const confirmBookingTime = () => { 
-    if (!bookingTime) return alert("Выберите время!"); 
-    setPaymentStatus('kaspi_card_booking');
-    setShowTimeModal(false); 
+  const validOrders = (orders || []).filter(o => o.status !== 'rejected' && o.status !== 'transfer_pending' && o.status !== 'waiter_pending');
+  const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
+  const kaspiRevenue = validOrders.filter(o => o.payMethod === 'kaspi').reduce((sum, o) => sum + o.total, 0);
+  const cashRevenue = validOrders.filter(o => o.payMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
+
+  const HeaderControls = () => (
+    <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+      <button onClick={() => setLang(lang === 'ru' ? 'kz' : 'ru')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', padding: '6px 8px', borderRadius: '8px', color: '#111827', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>
+        {lang === 'ru' ? 'KZ' : 'RU'}
+      </button>
+      <button onClick={logout} style={{ background: '#ef4444', border: 'none', color: '#fff', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontWeight: 'bold' }}>{lang === 'ru' ? 'Выход' : 'Шығу'}</button>
+    </div>
+  );
+
+  const PendingTransfersBlock = () => {
+    const pendingTransfers = (orders || []).filter(o => o.status === 'transfer_pending');
+    if (pendingTransfers.length === 0) return null;
+    return (
+       <div style={{ backgroundColor: '#fff', border: '4px solid #f59e0b', padding: '20px', borderRadius: '24px', marginBottom: '25px', boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)' }}>
+          <h2 style={{color: '#d97706', margin: '0 0 15px 0', fontSize: '18px'}}>💳 Ожидают подтверждения перевода!</h2>
+          {pendingTransfers.map(o => (
+             <div key={o.id} style={{ background: '#fef3c7', padding: '15px', borderRadius: '12px', marginBottom: '10px' }}>
+                <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}>Заказ: <b>{o.tableName}</b> перевел(а) <b style={{fontSize: '18px', color: '#b45309'}}>{o.total} ₸</b>.<br/>Проверьте поступление на карту <b>4400 4302 5493 5945</b></p>
+                <div style={{display: 'flex', gap: '10px'}}>
+                   <button onClick={() => {
+                       changeOrderStatus(o.id, 'new', 'kaspi');
+                       // Если это был залог за бронь, жестко бронируем стол
+                       if (o.orderType === 'booking_deposit') {
+                           setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
+                       }
+                   }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
+                   <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Денег нет</button>
+                </div>
+             </div>
+          ))}
+       </div>
+    );
   };
 
-  // ОТПРАВКА ЗАЛОГА КАССИРУ НА ПРОВЕРКУ
-  const confirmBookingTransfer = () => {
-    const newOrder = {
-       id: `BKG-${Math.floor(Math.random() * 10000)}`,
-       phone: currentUser.phone, tableId: preOrderTableId, tableName: 'Залог за стол',
-       cartItems: [], itemsText: `Залог за бронь на ${bookingTime}`,
-       total: 1000, orderType: 'booking_deposit',
-       date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-       status: 'transfer_pending', payMethod: 'kaspi', bookedTime: bookingTime
-    };
-    setOrders(prev => [newOrder, ...(prev || [])]);
-    setPendingOrderId(newOrder.id);
-    setPaymentStatus('processing');
-  };
-
-  const bookTableNow = (id) => { setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false, calledWaiter: null } : t)); setOrderType('in_hall'); };
-  
-  const handleFreeTable = (id) => {
-    setTables(prev => (prev || []).map(t => t.id === id ? { ...t, status: 'free', bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null } : t));
-  };
-
-  const handleChangeTableStart = (id) => {
-    setIsChangingTable(true);
-    setChangingFromTableId(id);
-    alert(lang === 'ru' ? "Выберите новый свободный столик из списка." : "Жаңа бос үстелді таңдаңыз.");
-  };
-
-  const handleChangeTableConfirm = (newId) => {
-    const newTable = (tables || []).find(t => t.id === newId);
-    setTables(prev => (prev || []).map(t => {
-        if (t.id === changingFromTableId) return { ...t, status: 'free', bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null };
-        if (t.id === newId) return { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCalling: false, calledWaiter: null };
-        return t;
-    }));
-    setOrders(prev => (prev || []).map(o => {
-        if (o.tableId === changingFromTableId && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected') return { ...o, tableId: newId, tableName: newTable.name };
-        return o;
-    }));
-    setIsChangingTable(false);
-    setChangingFromTableId(null);
-    alert(lang === 'ru' ? "Вы успешно пересели за " + newTable.name + "!" : "Сіз " + newTable.name + " үстеліне ауыстыңыз!");
-  };
-
-  const addToCart = (item) => setCart(prev => ({ ...(prev || {}), [item.id]: { ...item, quantity: ((prev || {})[item.id]?.quantity || 0) + 1 } }));
-  const removeFromCart = (id) => setCart(prev => { const updated = { ...(prev || {}) }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; });
-
-  const myCurrentTable = (tables || []).find(t => t.bookedBy === currentUser?.phone);
-  const activeTable = (tables || []).find(t => t.id === preOrderTableId) || myCurrentTable;
-  let activeTableName = orderType === 'delivery' ? t.delivery : (activeTable ? activeTable.name : t.takeaway);
-
-  const cartItemsArray = Object.values(cart || {});
-  const totalItemsCount = cartItemsArray.reduce((sum, item) => sum + item.quantity, 0);
-  const baseSubtotal = cartItemsArray.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalAmount = isPreOrderFlow ? (baseSubtotal === 0 ? 1000 : Math.round(baseSubtotal / 2)) : baseSubtotal;
-  const availableBonuses = customers[currentUser?.phone]?.bonuses || 0;
-
-  const createOrderObject = (statusToSet, assignedWaiterPhone = null, assignedWaiterName = null, payMethod = 'kaspi') => {
-    const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name} (x${i.quantity})`).join(', ') : "Обычный заказ";
-    const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
-    return { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: currentUser.phone, tableId: activeTable?.id || orderType, tableName: activeTableName, cartItems: cartItemsArray, itemsText: text, total: totalAmount, tips: 0, isPreOrder: isPreOrderFlow, bookedTime: isPreOrderFlow ? bookingTime : null, orderType, deliveryAddress: fullAddress, date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), status: statusToSet, waiterPhone: assignedWaiterPhone, waiterName: assignedWaiterName, isReviewed: false, reviewUnlockTime: null, payMethod };
-  };
-
-  const handlePayClick = () => {
-    if (cartItemsArray.length === 0 && !isPreOrderFlow) return alert("Выберите блюда!");
-    if (orderType === 'delivery' && !address.street) return alert("Укажите адрес доставки или используйте геоданные!");
-    setPaymentStatus('select_method'); 
-  };
-
-  const confirmTransfer = () => {
-    const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
-    setOrders(prev => [newOrder, ...(prev || [])]);
-    setPendingOrderId(newOrder.id);
-    setPaymentStatus('processing'); 
-  };
-
-  const handleCashSelection = () => {
-    if (orderType !== 'in_hall' || !activeTable) return alert(lang === 'ru' ? 'Оплата наличными доступна только при заказе за столиком в заведении!' : 'Қолма-қол ақшамен төлеу тек залда отырғанда ғана мүмкін!');
-    setPaymentStatus('select_waiter');
-  };
-
-  const confirmCashWithWaiter = (waiterPhone, waiterName) => {
-    const newOrder = createOrderObject('waiter_pending', waiterPhone, waiterName, 'cash');
-    setOrders(prev => [newOrder, ...(prev || [])]);
-    setPendingOrderId(newOrder.id);
-    setPaymentStatus('waiter_pending');
-  };
-
-  const selectRandomWaiter = () => {
-    const activeWaiters = Object.entries(roles || {}).filter(([p, data]) => data.role === 'waiter' && data.onShift);
-    if (activeWaiters.length === 0) return alert(lang === 'ru' ? 'К сожалению, сейчас нет свободных официантов.' : 'Кешіріңіз, қазір бос даяшылар жоқ.');
-    const randomW = activeWaiters[Math.floor(Math.random() * activeWaiters.length)];
-    confirmCashWithWaiter(randomW[0], randomW[1].name);
-  };
-
-  const handleFinishAndClear = () => { setCart({}); setIsPreOrderFlow(false); setPreOrderTableId(null); setPaymentStatus('idle'); setPendingOrderId(null); setActiveGuestTab('profile'); };
-  const copyToClipboard = (text) => { navigator.clipboard.writeText(text); alert('Реквизиты скопированы!'); };
-
-  const getWaiterRating = (phone) => {
-     const wRevs = (reviews || []).filter(r => r.targetId === phone);
-     if (wRevs.length === 0) return lang === 'ru' ? 'Новенький' : 'Жаңа';
-     const avg = wRevs.reduce((sum, r) => sum + r.rating, 0) / wRevs.length;
-     return `⭐️ ${avg.toFixed(1)} (${wRevs.length} отз.)`;
-  };
-
-  const submitReview = () => {
-     if (reviewRating === 0) return alert('Выберите оценку в звездах!');
-     if (reviewRating <= 3 && reviewText.trim().length === 0) return alert('Пожалуйста, напишите причину низкой оценки, чтобы мы стали лучше.');
-     const newReview = { id: `REV-${Date.now()}`, type: reviewOrder.waiterPhone ? 'waiter' : 'cafe', targetId: reviewOrder.waiterPhone || 'cafe', targetName: reviewOrder.waiterName || 'Кафе Амина', rating: reviewRating, text: reviewText, author: currentUser.name, date: new Date().toLocaleDateString('ru-RU') };
-     setReviews(prev => [newReview, ...(prev || [])]);
-     setOrders(prev => (prev || []).map(o => o.id === reviewOrder.id ? { ...o, isReviewed: true } : o));
-     setReviewOrder(null); setReviewRating(0); setReviewText(''); alert('Спасибо за ваш отзыв!');
-  };
-
-  const displayedMenu = selectedCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === selectedCategory);
-  const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
-  const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
-  const availableWaitersList = Object.entries(roles || {}).filter(([p, data]) => data.role === 'waiter' && data.onShift);
-  const myOrdersHistory = (orders || []).filter(o => o.phone === currentUser.phone);
-
-  return (
-    <div className="app-wrapper">
-      <style dangerouslySetInnerHTML={{__html: `
-        :root { --bg: #f4f5f7; --text: #111827; --gray: #6b7280; --orange: #ea580c; --green: #10b981; color-scheme: light; }
-        *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        html, body { margin: 0; padding: 0; width: 100%; max-width: 100vw; overflow-x: hidden; background-color: var(--bg); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--text); }
-        ::-webkit-scrollbar { display: none; }
-        .app-wrapper { display: flex; flex-direction: column; width: 100%; min-height: 100vh; overflow-x: hidden; padding-bottom: 80px; position: relative; }
-        
-        .payment-overlay { position: fixed; inset: 0; height: 100%; background: rgba(17,24,39,0.7); z-index: 9999; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; backdrop-filter: blur(4px); }
-        .payment-modal { background: #fff; width: 100%; max-width: 500px; border-radius: 28px 28px 0 0; padding: 30px 25px; animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; display: flex; flex-direction: column; }
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        @keyframes spinPulse { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.1); } 100% { transform: rotate(360deg) scale(1); } }
-        
-        .pay-method-btn { display: flex; align-items: center; justify-content: space-between; padding: 18px; border-radius: 16px; border: 2px solid #f3f4f6; margin-bottom: 12px; cursor: pointer; transition: 0.2s; background: #fff; }
-        .pay-method-btn:active { transform: scale(0.98); background: #f9fafb; border-color: #e5e7eb; }
-        
-        .star-btn { font-size: 35px; background: none; border: none; cursor: pointer; color: #d1d5db; transition: 0.2s; }
-        .star-btn.active { color: #f59e0b; }
-        
-        .top-header { width: 100%; background: #fff; padding: 15px 20px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.03); }
-        .logo-section { display: flex; align-items: center; gap: 12px; }
-        .logo-title { margin: 0; font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: 1px; }
-        .hamburger-menu-trigger { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e5e7eb; padding: 10px 14px; border-radius: 10px; font-weight: 800; font-size: 14px; cursor: pointer; color: var(--text); transition: 0.2s; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
-        .desktop-nav { display: none; gap: 25px; }
-        .desktop-nav button { background: none; border: none; font-size: 16px; font-weight: 800; cursor: pointer; color: var(--gray); transition: 0.2s; padding: 5px 0; }
-        .desktop-nav button.active { color: var(--orange); border-bottom: 3px solid var(--orange); }
-        .main-content { width: 100%; max-width: 1200px; margin: 0 auto; flex: 1; display: flex; flex-direction: column; position: relative; padding: 15px; box-sizing: border-box; }
-        .sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: none; opacity: 0; transition: opacity 0.25s ease; }
-        .sidebar-overlay.open { display: block; opacity: 1; }
-        .categories-sidebar { position: fixed; left: -280px; top: 0; bottom: 0; width: 260px; background: #fff; z-index: 1001; padding: 25px 20px; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow-y: auto; overflow-x: hidden; box-shadow: 5px 0 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 8px; }
-        .categories-sidebar.open { transform: translateX(280px); }
-        .close-sidebar-btn { display: flex; justify-content: space-between; align-items: center; background: none; border: none; font-size: 18px; font-weight: 900; color: var(--text); padding-bottom: 15px; border-bottom: 1px solid #e5e7eb; margin-bottom: 10px; cursor: pointer; width: 100%; }
-        .desktop-sidebar { display: none; }
-        .cat-button { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; border: none; cursor: pointer; transition: 0.2s; width: 100%; text-align: left; }
-        .cat-button .icon { font-size: 22px; }
-        .cat-button .name { font-size: 15px; font-weight: 800; }
-        .cat-button.active { background: var(--text); color: #fff; }
-        .cat-button.inactive { background: #f9fafb; color: var(--gray); }
-        .menu-layout { display: flex; flex-direction: column; width: 100%; }
-        .content-area { flex: 1; width: 100%; }
-        .stories-row { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; width: 100%; }
-        .story-item { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; cursor: pointer; }
-        .story-circle { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; border: 2px solid #fff; outline: 2px solid var(--orange); }
-        .food-list { display: grid; grid-template-columns: 1fr; gap: 12px; width: 100%; }
-        .food-card { background: #fff; padding: 12px; border-radius: 16px; display: flex; gap: 12px; align-items: center; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.03); box-sizing: border-box; }
-        .food-pic { width: 65px; height: 65px; border-radius: 12px; background: #f9fafb; display: flex; align-items: center; justify-content: center; font-size: 35px; flex-shrink: 0; overflow: hidden; }
-        .food-info { flex: 1; min-width: 0; }
-        .food-name { margin: 0 0 4px 0; font-size: 14px; font-weight: 800; color: var(--text); line-height: 1.2; white-space: normal; word-wrap: break-word; }
-        .food-ingr { margin: 0 0 8px 0; font-size: 11px; color: var(--gray); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .food-price { background: #fff7ed; color: var(--orange); padding: 4px 8px; border-radius: 6px; font-weight: 900; font-size: 13px; display: inline-block; }
-        .food-add { width: 40px; height: 40px; border-radius: 12px; background: var(--text); color: #fff; border: none; font-size: 22px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
-        .tables-filter-bar { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 15px; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; width: 100%; }
-        .filter-btn { padding: 10px 18px; border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; color: var(--gray); font-weight: 800; font-size: 13px; white-space: nowrap; cursor: pointer; transition: 0.2s; }
-        .filter-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
-        .tables-wrapper { width: 100%; box-sizing: border-box; }
-        .tables-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; }
-        .mobile-nav { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-around; padding: 10px 0 20px 0; z-index: 100; box-shadow: 0 -4px 20px rgba(0,0,0,0.05); width: 100%; }
-        .nav-item { background: none; border: none; display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: bold; font-size: 11px; cursor: pointer; color: var(--gray); }
-        .nav-item.active { color: var(--orange); }
-        .nav-icon { font-size: 24px; filter: grayscale(1); }
-        .nav-item.active .nav-icon { filter: none; }
-        .page-container { width: 100%; max-width: 600px; margin: 0 auto; }
-
-        @media (min-width: 850px) {
-          .app-wrapper { padding-bottom: 0; }
-          .mobile-nav { display: none !important; }
-          .desktop-nav { display: flex; }
-          .hamburger-menu-trigger { display: none !important; }
-          .sidebar-overlay { display: none !important; }
-          .main-content { padding: 30px 20px; }
-          .menu-layout { flex-direction: row; gap: 30px; }
-          .desktop-sidebar { display: flex; flex-direction: column; gap: 10px; width: 240px; flex-shrink: 0; }
-          .categories-sidebar { display: none; } 
-          .food-list { grid-template-columns: repeat(2, 1fr); gap: 20px; }
-          .food-card { padding: 16px; gap: 16px; border-radius: 20px; }
-          .food-pic { width: 80px; height: 80px; font-size: 40px; border-radius: 14px; }
-          .food-name { font-size: 16px; margin-bottom: 6px; }
-          .food-ingr { font-size: 13px; margin-bottom: 8px; }
-          .tables-grid { grid-template-columns: repeat(4, 1fr); gap: 15px; }
-          .payment-overlay { align-items: center; }
-          .payment-modal { border-radius: 24px; max-height: 80vh; }
-        }
-        @media (min-width: 1200px) { .tables-grid { grid-template-columns: repeat(5, 1fr); } }
-      `}}/>
-
-      {showIOSInstallGuide && (
-         <div className="payment-overlay" onClick={() => setShowIOSInstallGuide(false)}>
-           <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', padding: '40px 20px', overflowY: 'auto'}}>
-              <h2 style={{margin: '0 0 15px 0', fontSize: '22px', color: '#111827'}}>{lang === 'ru' ? 'Как установить приложение?' : 'Қосымшаны қалай орнатуға болады?'}</h2>
-              <p style={{color: '#6b7280', marginBottom: '25px', lineHeight: '1.5', fontSize: '15px'}}>
-                 {lang === 'ru' ? 'Чтобы добавить Кафе Amina на главный экран телефона, нажмите внизу экрана на кнопку ' : 'Amina кафесін телефонның бас экранына қосу үшін, экранның төменгі жағындағы '} 
-                 <b style={{color: '#3b82f6'}}>«Поделиться»</b> 
-                 <span style={{fontSize: '20px', margin: '0 5px'}}>⎋</span> 
-                 {lang === 'ru' ? 'и выберите пункт ' : 'түймесін басып, '}
-                 <b style={{color: '#111827'}}>«На экран Домой» ➕</b>.
-              </p>
-              <button onClick={() => setShowIOSInstallGuide(false)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer'}}>Понятно</button>
-           </div>
+  const renderWaiterPosModal = () => {
+    if (!showPosModal) return null; const table = (tables || []).find(t => t.id === posTableId); const posTotal = Object.values(posCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    return (
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f3f4f6', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+         <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{margin: 0, fontSize: '18px'}}>📱 Касса: {table?.name}</h2><button onClick={() => setShowPosModal(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
          </div>
-      )}
-
-      {showSupportModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-            <div>
-              <h2 style={{margin: 0, fontSize: '20px'}}>💬 Поддержка</h2>
-              <p style={{margin: '2px 0 0 0', fontSize: '12px', color: '#10b981', fontWeight: 'bold'}}>Онлайн. Отвечаем быстро!</p>
-            </div>
-            <button onClick={() => setShowSupportModal(false)} style={{background: '#374151', border: 'none', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>✕</button>
-          </div>
-          
-          <div style={{flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px'}}>
-             {supportChat.filter(m => m.phone === currentUser.phone).length === 0 && (
-               <p style={{textAlign: 'center', color: '#6b7280', fontSize: '13px', marginTop: '20px'}}>Здесь вы можете сообщить о баге, глюке или оставить предложение. Напишите нам!</p>
-             )}
-             {supportChat.filter(m => m.phone === currentUser.phone).map(m => (
-                <div key={m.id} style={{alignSelf: m.sender === 'guest' ? 'flex-end' : 'flex-start', background: m.sender === 'guest' ? '#111827' : '#fff', color: m.sender === 'guest' ? '#fff' : '#111827', border: m.sender === 'guest' ? 'none' : '1px solid #e5e7eb', padding: '12px', borderRadius: '16px', maxWidth: '85%', boxShadow: '0 2px 5px rgba(0,0,0,0.02)'}}>
-                   <p style={{margin: 0, fontSize: '15px', lineHeight: '1.4'}}>{m.text}</p>
-                   <p style={{margin: '5px 0 0 0', fontSize: '10px', opacity: 0.6, textAlign: 'right'}}>{m.time}</p>
-                </div>
-             ))}
-          </div>
-          
-          <div style={{padding: '15px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '10px', flexShrink: 0, paddingBottom: 'max(15px, env(safe-area-inset-bottom))'}}>
-            <input type="text" value={supportText} onChange={e=>setSupportText(e.target.value)} placeholder="Сообщение разработчикам..." style={{flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', fontSize: '15px', boxSizing: 'border-box', background: '#f9fafb', color: '#111827'}} />
-            <button onClick={() => {
-               if(!supportText.trim()) return;
-               setSupportChat(prev => [...(prev||[]), {id: Date.now(), phone: currentUser.phone, name: currentUser.name, sender: 'guest', text: supportText, time: new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}]);
-               setSupportText('');
-            }} style={{background: '#3b82f6', color: '#fff', border: 'none', width: '50px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px'}}>➤</button>
-          </div>
-        </div>
-      )}
-
-      {showTimeModal && (
-        <div className="payment-overlay" onClick={() => setShowTimeModal(false)}>
-          <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', overflowY: 'auto'}}>
-             <h2 style={{margin: '0 0 15px 0', color: '#111827'}}>{lang === 'ru' ? 'Выберите время' : 'Уақытты таңдаңыз'}</h2>
-             <input type="time" value={bookingTime} onChange={e=>setBookingTime(e.target.value)} style={{width: '100%', padding: '16px', borderRadius: '14px', border: '1px solid #d1d5db', marginBottom: '20px', fontSize: '20px', textAlign: 'center', fontWeight: 'bold', color: '#111827'}} />
-             <button onClick={confirmBookingTime} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#10b981', color: '#fff', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginBottom: '10px', fontSize: '16px'}}>{lang === 'ru' ? 'Забронировать (Залог 1000₸)' : 'Брондау (Залог 1000₸)'}</button>
-             <button onClick={() => { setShowTimeModal(false); setPreOrderTableId(null); }} style={{width: '100%', padding: '16px', borderRadius: '14px', background: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '16px'}}>{lang === 'ru' ? 'Отмена' : 'Болдырмау'}</button>
-          </div>
-        </div>
-      )}
-
-      {waiterCallTableId && (
-        <div className="payment-overlay" onClick={() => setWaiterCallTableId(null)}>
-          <div className="payment-modal" onClick={e => e.stopPropagation()}>
-             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexShrink: 0}}>
-                <h2 style={{margin: 0, color: '#111827', fontSize: '20px'}}>{lang === 'ru' ? 'Кого позвать?' : 'Кімді шақыру керек?'}</h2>
-                <button onClick={() => setWaiterCallTableId(null)} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold'}}>✕</button>
-             </div>
-             <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px', flexShrink: 0}}>{lang === 'ru' ? 'Выберите официанта, который подойдет к вашему столику.' : 'Үстеліңізге келетін даяшыны таңдаңыз.'}</p>
-             
-             <div style={{display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '60vh', overflowY: 'auto', paddingRight: '5px'}}>
-                {availableWaitersList.length === 0 ? <p style={{color: '#dc2626', textAlign: 'center'}}>{lang === 'ru' ? 'Нет свободных официантов' : 'Бос даяшылар жоқ'}</p> : 
-                  availableWaitersList.map(([p, data]) => (
-                     <button key={p} onClick={() => {
-                        setTables(prev => (prev || []).map(t => t.id === waiterCallTableId ? { ...t, isCalling: true, calledWaiter: p, callType: isArrivalCall ? 'arrival' : 'normal' } : t));
-                        setWaiterCallTableId(null);
-                        setIsArrivalCall(false);
-                        alert(lang === 'ru' ? "Официант уведомлен! Скоро подойдет." : "Даяшыға хабарланды! Жақында келеді.");
-                     }} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderRadius: '14px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', flexShrink: 0}}>
-                        <span style={{fontWeight: 'bold', color: '#111827', fontSize: '16px'}}>{data.name}</span>
-                        <span style={{color: '#f59e0b', fontWeight: 'bold', fontSize: '13px'}}>{getWaiterRating(p)}</span>
-                     </button>
-                  ))
-                }
-             </div>
-          </div>
-        </div>
-      )}
-
-      {reviewOrder && (
-        <div className="payment-overlay">
-          <div className="payment-modal" style={{textAlign: 'center', overflowY: 'auto'}}>
-             <h2 style={{margin: '0 0 10px 0', color: '#111827'}}>Как вам обслуживание?</h2>
-             <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px'}}>Оцените работу официанта <b style={{color: '#111827'}}>{reviewOrder.waiterName || 'Кафе'}</b></p>
-             
-             <div style={{display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px'}}>
-               {[1,2,3,4,5].map(star => (
-                 <button key={star} onClick={() => setReviewRating(star)} className={`star-btn ${reviewRating >= star ? 'active' : ''}`}>★</button>
-               ))}
-             </div>
-
-             {reviewRating > 0 && reviewRating <= 3 && (
-               <div style={{marginBottom: '20px', textAlign: 'left'}}>
-                 <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#dc2626', fontWeight: 'bold'}}>* Обязательно укажите причину низкой оценки</p>
-                 <textarea value={reviewText} onChange={e=>setReviewText(e.target.value)} placeholder="Что пошло не так? Ваш отзыв поможет нам стать лучше." style={{width: '100%', height: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #dc2626', resize: 'none', background: '#fef2f2', color: '#111827', fontFamily: 'inherit'}}></textarea>
-               </div>
-             )}
-             
-             {reviewRating > 3 && (
-               <div style={{marginBottom: '20px'}}>
-                 <textarea value={reviewText} onChange={e=>setReviewText(e.target.value)} placeholder="Напишите комментарий (необязательно)" style={{width: '100%', height: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #d1d5db', resize: 'none', background: '#f9fafb', color: '#111827', fontFamily: 'inherit'}}></textarea>
-               </div>
-             )}
-
-             <button onClick={submitReview} style={{width: '100%', padding: '16px', background: '#111827', color: '#fff', border: 'none', borderRadius: '14px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer'}}>Отправить отзыв</button>
-             <button onClick={() => {setOrders(prev => prev.map(o => o.id === reviewOrder.id ? { ...o, isReviewed: true } : o)); setReviewOrder(null);}} style={{background: 'none', border: 'none', color: '#6b7280', marginTop: '15px', cursor: 'pointer', textDecoration: 'underline'}}>Не сейчас</button>
-          </div>
-        </div>
-      )}
-
-      {paymentStatus !== 'idle' && (
-        <div className="payment-overlay">
-          <div className="payment-modal" style={{overflowY: 'auto'}}>
-            
-            {paymentStatus === 'select_method' && (
-              <>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px'}}>
-                  <h2 style={{margin: 0, fontSize: '22px', fontWeight: '900', color: '#111827'}}>Метод оплаты</h2>
-                  <button onClick={() => setPaymentStatus('idle')} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563'}}>✕</button>
-                </div>
-                
-                <div className="pay-method-btn" onClick={() => setPaymentStatus('kaspi_card')}>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                    <div style={{background: '#eff6ff', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>💳</div>
-                    <div>
-                      <p style={{margin: '0 0 3px 0', fontWeight: '900', fontSize: '16px', color: '#111827'}}>Банковская карта / Kaspi</p>
-                      <p style={{margin: 0, fontSize: '13px', color: '#6b7280'}}>Прямой перевод по реквизитам</p>
-                    </div>
-                  </div>
-                  <span style={{color: '#9ca3af', fontWeight: 'bold'}}>➔</span>
-                </div>
-
-                <div className="pay-method-btn" onClick={handleCashSelection}>
-                  <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
-                    <div style={{background: '#ecfdf5', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>💵</div>
-                    <div>
-                      <p style={{margin: '0 0 3px 0', fontWeight: '900', fontSize: '16px', color: '#111827'}}>Наличными</p>
-                      <p style={{margin: 0, fontSize: '13px', color: '#6b7280'}}>Вызов официанта к столику</p>
-                    </div>
-                  </div>
-                  <span style={{color: '#9ca3af', fontWeight: 'bold'}}>➔</span>
-                </div>
-              </>
-            )}
-
-            {paymentStatus === 'select_waiter' && (
-              <>
-                 <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
-                  <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
-                  <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>Кто вас обслужит?</h2>
-                </div>
-                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px'}}>Выберите официанта по отзывам для оплаты наличными.</p>
-
-                <button onClick={selectRandomWaiter} style={{width: '100%', padding: '16px', borderRadius: '14px', border: '2px dashed #111827', background: '#f9fafb', color: '#111827', fontWeight: '900', fontSize: '15px', cursor: 'pointer', marginBottom: '15px'}}>🎲 Мне лень, выберите случайно</button>
-
-                <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-                  {availableWaitersList.length === 0 ? <p style={{textAlign: 'center', color: '#dc2626'}}>К сожалению, сейчас нет свободных официантов.</p> : 
-                   availableWaitersList.map(([p, data]) => (
-                     <div key={p} onClick={() => confirmCashWithWaiter(p, data.name)} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '14px', cursor: 'pointer'}}>
-                        <div>
-                           <p style={{margin: '0 0 5px 0', fontWeight: 'bold', fontSize: '16px', color: '#111827'}}>{data.name}</p>
-                           <p style={{margin: 0, fontSize: '13px', color: '#f59e0b', fontWeight: 'bold'}}>{getWaiterRating(p)}</p>
-                        </div>
-                        <span style={{color: '#10b981', fontWeight: 'bold'}}>Выбрать ➔</span>
-                     </div>
-                   ))
-                  }
-                </div>
-              </>
-            )}
-
-            {paymentStatus === 'kaspi_card' && (
-              <>
-                <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
-                  <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
-                  <h2 style={{margin: '0', fontSize: '20px', fontWeight: '900', color: '#111827'}}>Безопасный перевод</h2>
-                </div>
-                
-                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Скопируйте номер карты и переведите точную сумму в приложении вашего банка.</p>
-                
-                <div style={{background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '20px', marginBottom: '25px', textAlign: 'center'}}>
-                  <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>К оплате</p>
-                  <p style={{margin: '0 0 20px 0', fontSize: '36px', fontWeight: '900', color: '#ea580c'}}>{totalAmount} ₸</p>
-                  
-                  <div style={{textAlign: 'left'}}>
-                    <p style={{margin: '0 0 8px 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>Номер карты (Visa / Mastercard)</p>
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '15px', borderRadius: '14px', border: '2px dashed #d1d5db'}}>
-                      <span style={{fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#111827'}}>4400 4302 5493 5945</span>
-                      <button onClick={() => copyToClipboard('4400430254935945')} style={{background: '#111827', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px'}}>Копия</button>
-                    </div>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px'}}><span style={{color: '#10b981', fontSize: '18px'}}>✓</span><span style={{fontSize: '14px', color: '#111827', fontWeight: 'bold'}}>Получатель: Эльвира А.</span></div>
-                  </div>
-                </div>
-                <button onClick={confirmTransfer} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'}}>Я перевел({currentUser.name ? 'а' : ''}) деньги</button>
-              </>
-            )}
-
-            {paymentStatus === 'kaspi_card_booking' && (
-              <>
-                <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
-                  <button onClick={() => setPaymentStatus('idle')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
-                  <h2 style={{margin: '0', fontSize: '20px', fontWeight: '900', color: '#111827'}}>Оплата залога</h2>
-                </div>
-                
-                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '25px', lineHeight: '1.4'}}>Для подтверждения брони столика внесите залог. В случае неприбытия сумма не возвращается.</p>
-                
-                <div style={{background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '20px', padding: '20px', marginBottom: '25px', textAlign: 'center'}}>
-                  <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold'}}>К оплате</p>
-                  <p style={{margin: '0 0 20px 0', fontSize: '36px', fontWeight: '900', color: '#ea580c'}}>1000 ₸</p>
-                  
-                  <div style={{textAlign: 'left'}}>
-                    <p style={{margin: '0 0 8px 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>Номер карты (Visa / Mastercard)</p>
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '15px', borderRadius: '14px', border: '2px dashed #d1d5db'}}>
-                      <span style={{fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#111827'}}>4400 4302 5493 5945</span>
-                      <button onClick={() => copyToClipboard('4400430254935945')} style={{background: '#111827', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px'}}>Копия</button>
-                    </div>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px'}}><span style={{color: '#10b981', fontSize: '18px'}}>✓</span><span style={{fontSize: '14px', color: '#111827', fontWeight: 'bold'}}>Получатель: Эльвира А.</span></div>
-                  </div>
-                </div>
-                <button onClick={confirmBookingTransfer} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'}}>Я перевел(а) 1000 ₸</button>
-              </>
-            )}
-
-            {paymentStatus === 'processing' && (
-              <div style={{textAlign: 'center', padding: '40px 0'}}>
-                <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
-                <h2 style={{marginTop: '20px', color: '#111827'}}>Проверка платежа...</h2>
-                <p style={{color: '#6b7280', fontSize: '15px', padding: '0 20px'}}>Пожалуйста, подождите. Кассир проверяет поступление средств на карту.</p>
+         <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+            {currentUser.isSenior && <button onClick={applySeniorDiscount} style={{width: '100%', padding: '10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer'}}>🎁 Применить скидку -10%</button>}
+            {(menu || []).map(item => (
+              <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
+                 <div style={{ flex: 1, paddingRight: '10px' }}><div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '30px', height: '30px', borderRadius: '8px', objectFit: 'cover'}}/> : <span>{item.img}</span>}<p style={{margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#111827'}}>{item.name}</p></div><p style={{margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px'}}>{item.price} ₸</p></div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}><button onClick={() => removeFromPosCart(item.id)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827' }}>-</button><span style={{fontWeight: 'bold', fontSize: '16px', color: '#111827'}}>{(posCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToPosCart(item)} style={{ padding: '8px 15px', borderRadius: '10px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff' }}>+</button></div>
               </div>
-            )}
-
-            {paymentStatus === 'waiter_pending' && (
-              <div style={{textAlign: 'center', padding: '40px 0'}}>
-                <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
-                <h2 style={{marginTop: '20px', color: '#111827'}}>Ожидаем официанта</h2>
-                <p style={{color: '#6b7280', fontSize: '15px', padding: '0 20px'}}>Официант уже получил уведомление и скоро подойдет к вашему столику для расчета.</p>
-              </div>
-            )}
-
-            {paymentStatus === 'rejected' && (
-              <div style={{textAlign: 'center', padding: '30px 0'}}>
-                <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#dc2626'}}>Оплата не найдена</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Кассир не подтвердил поступление денег. Пожалуйста, проверьте перевод и попробуйте снова.</p>
-                <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
-              </div>
-            )}
-
-            {paymentStatus === 'booking_success' && (
-              <div style={{textAlign: 'center', padding: '30px 0'}}>
-                <div style={{fontSize: '70px', color: '#10b981', marginBottom: '15px'}}>✅</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#111827'}}>Бронь подтверждена!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Стол забронирован на ваше имя. Когда приедете в заведение, нажмите кнопку «🙋‍♂️ Я пришел» на карточке вашего столика.</p>
-                <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); setActiveGuestTab('table'); }} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Супер</button>
-              </div>
-            )}
-
-            {paymentStatus === 'success' && (
-              <div style={{textAlign: 'center', padding: '30px 0'}}>
-                <div style={{fontSize: '70px', color: '#10b981', marginBottom: '15px'}}>✅</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#111827'}}>Оплата прошла!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Деньги успешно поступили. Ваш заказ оформлен и уже отправлен на кухню.</p>
-                <button onClick={handleFinishAndClear} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Отлично</button>
-              </div>
-            )}
-
-            {paymentStatus === 'cash_success' && (
-              <div style={{textAlign: 'center', padding: '30px 0'}}>
-                <div style={{fontSize: '70px', marginBottom: '15px'}}>✅</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '26px', color: '#111827'}}>Оплата принята!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Официант подтвердил оплату. Заказ отправлен на кухню.</p>
-                <button onClick={handleFinishAndClear} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Отлично</button>
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
-
-      {!isAnyModalOpen && totalItemsCount > 0 && activeGuestTab !== 'cart' && (
-        <div style={{position: 'fixed', bottom: '85px', left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '400px', zIndex: 99}}>
-           <button onClick={() => setActiveGuestTab('cart')} style={{width: '100%', padding: '16px 20px', background: '#111827', color: '#fff', borderRadius: '18px', border: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 8px 25px rgba(17,24,39,0.3)'}}>
-              <span style={{display: 'flex', alignItems: 'center', gap: '10px'}}><span style={{background: '#ea580c', padding: '4px 10px', borderRadius: '10px', color: '#fff'}}>{totalItemsCount}</span> {t.inCart}</span>
-              <span>{baseSubtotal} ₸ ➔</span>
-           </button>
-        </div>
-      )}
-
-      <div className={`sidebar-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}></div>
-      <div className={`categories-sidebar ${isMenuOpen ? 'open' : ''}`}>
-        <button className="close-sidebar-btn" onClick={() => setIsMenuOpen(false)}><span>📂 {t.cats}</span> <span>✕</span></button>
-        {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => { setSelectedCategory(cat.id); setIsMenuOpen(false); }} className={`cat-button ${selectedCategory === cat.id ? 'active' : 'inactive'}`}><span className="icon">{cat.icon}</span><span className="name">{cat.name}</span></button>))}
+            ))}
+         </div>
+         <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb' }}><p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '20px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого чек:</span> <span>{posTotal} ₸</span></p><button onClick={submitPosOrder} style={{ width: '100%', padding: '18px', borderRadius: '14px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '16px' }}>Отправить на кухню</button></div>
       </div>
+    );
+  };
 
-      <header className="top-header">
-        <div className="logo-section"><h1 className="logo-title">АМИНА<span style={{ color: '#ea580c' }}>.</span></h1>
-          <div className="desktop-nav">
-            <button className={activeGuestTab === 'menu' ? 'active' : ''} onClick={() => setActiveGuestTab('menu')}>{t.menu}</button>
-            <button className={activeGuestTab === 'table' ? 'active' : ''} onClick={() => setActiveGuestTab('table')}>{t.halls}</button>
-            <button className={activeGuestTab === 'cart' ? 'active' : ''} onClick={() => setActiveGuestTab('cart')}>{t.cart} {totalItemsCount > 0 && <span style={{background: '#ea580c', color: '#fff', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', marginLeft: '5px'}}>{totalItemsCount}</span>}</button>
-          </div>
+  const renderWaiterMenuModal = () => {
+    if (!showWaiterMenu) return null;
+    const displayedMenu = waiterMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === waiterMenuCategory);
+    return (
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{margin: 0, fontSize: '18px'}}>📖 Меню заведения</h2><button onClick={() => setShowWaiterMenu(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
         </div>
-        
-        <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-          <button onClick={() => setLang(lang === 'ru' ? 'kz' : 'ru')} style={{ background: '#f3f4f6', border: '1px solid #d1d5db', padding: '8px 10px', borderRadius: '10px', color: '#111827', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
-            {lang === 'ru' ? 'KZ' : 'RU'}
-          </button>
-          <button onClick={() => setActiveGuestTab('profile')} style={{ background: '#d1fae5', border: 'none', padding: '8px 15px', borderRadius: '12px', color: '#065f46', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
-            👤 {currentUser.isAnonymous ? (lang === 'ru' ? 'Войти' : 'Кіру') : currentUser.name}
-          </button>
+        <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', padding: '15px', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+          {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setWaiterMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: waiterMenuCategory === cat.id ? '#111827' : '#f3f4f6', color: waiterMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
         </div>
-      </header>
-
-      <main className="main-content">
-        {activeGuestTab === 'menu' && (
-          <div className="menu-layout">
-            <div className="desktop-sidebar">
-              <h3 style={{margin: '0 0 10px 0', fontSize: '16px', color: 'var(--text)'}}>{t.cats}</h3>
-              {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setSelectedCategory(cat.id)} className={`cat-button ${selectedCategory === cat.id ? 'active' : 'inactive'}`}><span className="icon">{cat.icon}</span><span className="name">{cat.name}</span></button>))}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+          {displayedMenu.map(item => (
+            <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.6 : 1 }}>
+              <div style={{flex: 1}}>
+                <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                   {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover'}} alt="" /> : <span style={{fontSize:'24px'}}>{item.img}</span>}
+                   <div>
+                     <p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p>
+                     <p style={{margin: '2px 0 0 0', fontSize: '14px', color: '#ea580c', fontWeight: 'bold'}}>{item.price} ₸</p>
+                   </div>
+                </div>
+                <p style={{margin: '8px 0 0 0', fontSize: '12px', color: '#6b7280'}}>{item.ingredients}</p>
+              </div>
+              {currentUser.isSenior && (
+                 <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', marginLeft: '10px' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+              )}
             </div>
-            <div className="content-area">
-              <button className="hamburger-menu-trigger" onClick={() => setIsMenuOpen(true)}><span>☰</span> {t.cats}</button>
-              <div className="stories-row">{STORIES.map(story => (<div key={story.id} className="story-item"><div className="story-circle" style={{ background: story.color }}>{story.emoji}</div><span style={{ fontSize: '11px', fontWeight: 'bold', color: '#111827' }}>{story.title}</span></div>))}</div>
-              
-              <div className="food-list">
-                {displayedMenu.map(item => (
-                  <div key={item.id} className="food-card" style={{ opacity: item.isStop ? 0.6 : 1 }}>
-                    <div className="food-pic" style={{ filter: item.isStop ? 'grayscale(1)' : 'none' }}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover'}}/> : item.img}</div>
-                    <div className="food-info">
-                      <h3 className="food-name" style={{textDecoration: item.isStop ? 'line-through' : 'none', color: '#111827'}}>{item.name}</h3>
-                      <p className="food-ingr">{item.ingredients}</p>
-                      {item.isStop ? <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '12px' }}>Стоп: {item.stopReason}</span> : <span className="food-price">{item.price} ₸</span>}
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSupportPanel = () => {
+    const chatUsersMap = new Map();
+    (supportChat || []).forEach(msg => { chatUsersMap.set(msg.phone, { phone: msg.phone, name: msg.name, lastTime: msg.time }); });
+    const chatUsersList = Array.from(chatUsersMap.values()).reverse(); 
+
+    return (
+      <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+        {activeSupportPhone ? (
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', border: '1px solid #d1d5db', display: 'flex', flexDirection: 'column', height: '75vh' }}>
+            <div style={{ padding: '15px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: '15px', background: '#f9fafb', borderRadius: '20px 20px 0 0' }}>
+               <button onClick={() => setActiveSupportPhone(null)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#e5e7eb', cursor: 'pointer', fontWeight: 'bold' }}>← Назад</button>
+               <div>
+                 <h3 style={{margin: 0, color: '#111827'}}>{chatUsersMap.get(activeSupportPhone)?.name}</h3>
+                 <p style={{margin: '2px 0 0 0', fontSize: '12px', color: '#6b7280'}}>{activeSupportPhone}</p>
+               </div>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+               {(supportChat || []).filter(m => m.phone === activeSupportPhone).map(m => (
+                  <div key={m.id} style={{alignSelf: m.sender === 'support' ? 'flex-end' : 'flex-start', background: m.sender === 'support' ? '#3b82f6' : '#f3f4f6', color: m.sender === 'support' ? '#fff' : '#111827', padding: '12px', borderRadius: '14px', maxWidth: '85%'}}>
+                     <p style={{margin: 0, fontSize: '14px'}}>{m.text}</p>
+                     <p style={{margin: '5px 0 0 0', fontSize: '10px', opacity: 0.7, textAlign: 'right'}}>{m.time}</p>
+                  </div>
+               ))}
+            </div>
+
+            <div style={{ padding: '15px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '10px' }}>
+              <input type="text" value={supportAdminText} onChange={e=>setSupportAdminText(e.target.value)} placeholder="Написать гостю..." style={{flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', boxSizing: 'border-box'}} />
+              <button onClick={() => {
+                 if(!supportAdminText.trim()) return;
+                 setSupportChat(prev => [...(prev||[]), {id: Date.now(), phone: activeSupportPhone, name: chatUsersMap.get(activeSupportPhone)?.name, sender: 'support', text: supportAdminText, time: new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}]);
+                 setSupportAdminText('');
+              }} style={{background: '#3b82f6', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'}}>➤</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', border: '1px solid #d1d5db', overflow: 'hidden' }}>
+            <h3 style={{ margin: 0, padding: '15px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', color: '#111827' }}>Входящие обращения</h3>
+            {chatUsersList.length === 0 ? <p style={{padding: '20px', color: '#6b7280', textAlign: 'center'}}>Тикетов пока нет.</p> : 
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {chatUsersList.map(u => (
+                  <div key={u.phone} onClick={() => setActiveSupportPhone(u.phone)} style={{ padding: '15px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                    <div>
+                      <p style={{margin: 0, fontWeight: 'bold', color: '#111827', fontSize: '16px'}}>{u.name}</p>
+                      <p style={{margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280'}}>{u.phone}</p>
                     </div>
-                    
-                    {cart[item.id] ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', borderRadius: '12px', padding: '4px', flexShrink: 0 }}>
-                        <button onClick={() => removeFromCart(item.id)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#fff', color: '#111827', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>-</button>
-                        <span style={{ fontWeight: '900', fontSize: '14px', minWidth: '16px', textAlign: 'center', color: '#111827' }}>{cart[item.id].quantity}</span>
-                        <button onClick={() => addToCart(item)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>+</button>
-                      </div>
-                    ) : (
-                      <button disabled={item.isStop} onClick={() => addToCart(item)} className="food-add" style={{ backgroundColor: item.isStop ? '#d1d5db' : '#111827' }}>+</button>
-                    )}
+                    <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>Открыть ➔</span>
                   </div>
                 ))}
+              </div>
+            }
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (currentUser.role === 'developer') {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f0fdf4', fontFamily: 'Arial', paddingBottom: '80px' }}>
+        <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2>👨‍💻 Техподдержка</h2>
+          <HeaderControls />
+        </header>
+        {renderSupportPanel()}
+      </div>
+    );
+  }
+
+  // --- КАБИНЕТ КАССИРА ---
+  if (currentUser.role === 'cashier') {
+    const cashPendingTables = (tables || []).filter(t => t.isCallingForBill);
+    const posTotal = Object.values(cashierCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
+        <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>👩‍💻 Касса: {currentUser.name}</h2>
+          <HeaderControls />
+        </header>
+        <div style={{ display: 'flex', gap: '10px', padding: '20px', justifyContent: 'flex-start', overflowX: 'auto', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+          <button onClick={() => setCashierTab('orders')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'orders' ? '#10b981' : '#f3f4f6', color: cashierTab === 'orders' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🔔 Оплаты</button>
+          <button onClick={() => setCashierTab('pos')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'pos' ? '#3b82f6' : '#f3f4f6', color: cashierTab === 'pos' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🛒 Терминал</button>
+          <button onClick={() => setCashierTab('report')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'report' ? '#8b5cf6' : '#f3f4f6', color: cashierTab === 'report' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 X-Отчет</button>
+        </div>
+
+        {cashierTab === 'orders' && (
+          <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+            <PendingTransfersBlock />
+
+            {cashPendingTables.map(table => {
+               const orderForTable = (orders || []).find(o => o.tableId === table.id && (o.status === 'cash_pending' || o.status === 'cooking' || o.status === 'new'));
+               return (
+                 <div key={`c-bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '2px solid #dc2626', padding: '20px', borderRadius: '16px', marginBottom: '15px' }}>
+                    <h3 style={{ color: '#991b1b', margin: '0 0 10px 0' }}>🏃 Гость подошел к кассе ({table.name})</h3>
+                    <p style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#111827', fontWeight: 'bold' }}>К оплате: {orderForTable?.total || '?'} ₸</p>
+                    <div style={{display: 'flex', gap: '10px'}}>
+                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
+                      <button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(orderForTable) changeOrderStatus(orderForTable.id, 'delivered', 'cash'); }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
+                    </div>
+                 </div>
+               )
+            })}
+          </div>
+        )}
+
+        {cashierTab === 'pos' && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)' }}>
+            <div style={{ padding: '15px', background: '#fff', display: 'flex', gap: '10px' }}>
+               <button onClick={() => setCashierOrderType('takeaway')} style={{flex:1, minWidth: 0, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', background: cashierOrderType === 'takeaway' ? '#111827' : '#fff', color: cashierOrderType === 'takeaway' ? '#fff' : '#111827', fontWeight: 'bold', cursor: 'pointer'}}>🛍 Навынос</button>
+               <button onClick={() => setCashierOrderType('delivery')} style={{flex:1, minWidth: 0, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', background: cashierOrderType === 'delivery' ? '#111827' : '#fff', color: cashierOrderType === 'delivery' ? '#fff' : '#111827', fontWeight: 'bold', cursor: 'pointer'}}>🛵 Доставка</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+              {(menu || []).map(item => (
+                <div key={item.id} style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
+                   <div style={{ flex: 1 }}><p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p><p style={{margin: '2px 0 0 0', color: '#6b7280', fontSize: '13px'}}>{item.price} ₸</p></div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => removeFromCashierCart(item.id)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827' }}>-</button><span style={{fontWeight: 'bold', color: '#111827'}}>{(cashierCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToCashierCart(item)} style={{ padding: '6px 12px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff' }}>+</button></div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '2px solid #e5e7eb' }}>
+               <p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '22px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого:</span> <span>{posTotal} ₸</span></p>
+               <div style={{display: 'flex', gap: '10px'}}>
+                  <button onClick={() => submitCashierOrder('kaspi')} style={{ flex: 1, minWidth: 0, padding: '16px', borderRadius: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Оплата Kaspi</button>
+                  <button onClick={() => submitCashierOrder('cash')} style={{ flex: 1, minWidth: 0, padding: '16px', borderRadius: '12px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>Наличными</button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {cashierTab === 'report' && (
+          <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+            <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>📊 Финансовый отчет (Смена)</h2>
+            <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '20px', border: '1px solid #e5e7eb', marginBottom: '20px' }}>
+               <p style={{margin: '0 0 10px 0', color: '#6b7280', fontWeight: 'bold'}}>Общая выручка за сегодня</p>
+               <h1 style={{ color: '#10b981', fontSize: '40px', margin: '0 0 20px 0' }}>{totalRevenue} ₸</h1>
+               <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f3f4f6', paddingTop: '15px'}}>
+                  <div><p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>Kaspi (Переводы)</p><p style={{margin: '5px 0 0 0', color: '#111827', fontWeight: 'bold', fontSize: '18px'}}>{kaspiRevenue} ₸</p></div>
+                  <div style={{textAlign: 'right'}}><p style={{margin: 0, color: '#6b7280', fontSize: '14px'}}>Наличные (В ящике)</p><p style={{margin: '5px 0 0 0', color: '#111827', fontWeight: 'bold', fontSize: '18px'}}>{cashRevenue} ₸</p></div>
+               </div>
+            </div>
+
+            <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 Лента чеков:</h3>
+            {validOrders.length === 0 ? <p style={{color: '#6b7280'}}>Чеков пока нет.</p> : 
+              validOrders.map(o => (
+                <div key={o.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', padding: '15px', marginBottom: '15px' }}>
+                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px'}}>
+                     <span style={{fontWeight: '900', color: '#111827'}}>{o.tableName}</span>
+                     <span style={{fontWeight: '900', color: '#10b981', fontSize: '16px'}}>{o.total} ₸</span>
+                   </div>
+                   <p style={{margin: '0 0 10px 0', fontSize: '12px', color: '#3b82f6', fontWeight: 'bold'}}>{o.payMethod === 'kaspi' ? 'Kaspi Перевод' : o.payMethod === 'cash' ? 'Наличные' : 'Оплачено'}</p>
+                   <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>{o.itemsText}</p>
+                   <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
+                      <span>Обслужил(а): {o.waiterName || 'Сайт'}</span>
+                      <span>{o.date}</span>
+                   </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (currentUser.role === 'chef') {
+    const displayedChefMenu = chefMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === chefMenuCategory);
+
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial' }}>
+        <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>👨‍🍳 Шеф: {currentUser.name}</h2>
+          <HeaderControls />
+        </header>
+        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+          <h3 style={{color: '#111827'}}>Управление стоп-листом и Фото:</h3>
+          
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
+            {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setChefMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: chefMenuCategory === cat.id ? '#111827' : '#f3f4f6', color: chefMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {displayedChefMenu.map(item => (
+              <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '12px', display: 'grid', gridTemplateColumns: '50px 1fr auto auto', gap: '15px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
+                <div style={{fontSize: '30px', textAlign: 'center'}}>{item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}</div>
+                <div style={{minWidth: 0}}>
+                  <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>
+                  {item.isStop && <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#dc2626' }}>Стоп: {item.stopReason}</p>}
+                </div>
+                
+                <label style={{ cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', textAlign: 'center', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                  📷 Фото
+                  <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => handlePhotoUpload(e, item.id)} />
+                </label>
+
+                <button onClick={() => toggleStopList(item.id)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentUser.role === 'cook') {
+    const myCats = STATION_MAP[currentUser.station] || [];
+    const myOrders = (orders || []).filter(o => (o.status === 'new' || o.status === 'cooking' || o.status === 'cash_pending') && o.cartItems?.some(i => myCats.includes(i.category)));
+    const stationNames = { 'hot': 'Горячий цех', 'cold': 'Холодный цех', 'bar': 'Бар', 'mangal': 'Мангал' };
+    const myStationName = stationNames[currentUser.station] || 'Кухня';
+
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#fffbeb', fontFamily: 'Arial' }}>
+        <header style={{ backgroundColor: '#f59e0b', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>👨‍🍳 {currentUser.name} ({myStationName})</h2>
+          <HeaderControls />
+        </header>
+        <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+          {myOrders.length === 0 ? <p style={{marginTop: '20px', color: '#6b7280'}}>Пока нет активных чеков 🙌</p> : 
+          myOrders.map(order => {
+            const items = (order.cartItems || []).filter(i => myCats.includes(i.category));
+            return (
+              <div key={order.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', borderTop: '8px solid #3b82f6' }}>
+                <h4 style={{color: '#111827'}}>Стол: {order.tableName}</h4>
+                {order.deliveryAddress && <p style={{fontSize: '13px', color: '#4b5563', padding: '8px', background: '#f3f4f6', borderRadius: '8px'}}>{renderTextWithLinks(order.deliveryAddress)}</p>}
+                <div style={{ backgroundColor: '#f9fafb', padding: '10px', borderRadius: '8px', margin: '10px 0', color: '#111827' }}>{items.map((item, idx) => (<div key={idx} style={{ padding: '5px 0', fontSize: '16px', fontWeight: 'bold' }}>{item.img} {item.name} — <span style={{color: 'red'}}>x{item.quantity}</span></div>))}</div>
+                {order.status === 'new' ? <button onClick={() => changeOrderStatus(order.id, 'cooking')} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Начать готовить</button> : <button onClick={() => changeOrderStatus(order.id, 'ready_for_pickup')} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Готово / Отдать</button>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (currentUser.role === 'waiter') {
+    const pickups = (orders || []).filter(o => o.status === 'ready_for_pickup' && o.orderType !== 'delivery');
+    const cashPending = (orders || []).filter(o => (o.status === 'cash_pending' || o.status === 'cooking') && o.orderType === 'in_hall');
+    
+    const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
+    const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
+
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f0fdf4', fontFamily: 'Arial', paddingBottom: '50px' }}>
+        {showPosModal && renderWaiterPosModal()}
+        {renderWaiterMenuModal()}
+
+        <header style={{ backgroundColor: '#10b981', padding: '20px', color: '#fff', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{margin: 0}}>{currentUser.isSenior ? '👑' : '🏃‍♂️'} {currentUser.name}</h2>
+            <HeaderControls />
+          </div>
+          <button onClick={() => setShowWaiterMenu(true)} style={{ width: '100%', padding: '12px', borderRadius: '10px', background: '#fff', color: '#10b981', fontWeight: '900', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', fontSize: '16px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>📖 Посмотреть Меню</button>
+        </header>
+
+        <div style={{ padding: '20px' }}>
+          
+          <div style={{ backgroundColor: '#fff', border: '4px solid #10b981', padding: '20px', borderRadius: '24px', marginBottom: '25px', boxShadow: '0 10px 25px rgba(16, 185, 129, 0.2)', display: (orders || []).filter(o => o.status === 'waiter_pending' && o.waiterPhone === currentUser.phone).length === 0 ? 'none' : 'block' }}>
+            <h2 style={{color: '#065f46', margin: '0 0 15px 0', fontSize: '18px'}}>🏃‍♂️ Вас вызвали для оплаты!</h2>
+            {(orders || []).filter(o => o.status === 'waiter_pending' && o.waiterPhone === currentUser.phone).map(o => (
+               <div key={o.id} style={{ background: '#ecfdf5', padding: '15px', borderRadius: '12px', marginBottom: '10px' }}>
+                  <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}><b>{o.tableName}</b> выбрал вас. К оплате: <b style={{fontSize: '18px', color: '#047857'}}>{o.total} ₸</b> (Наличные)</p>
+                  <button onClick={() => { changeOrderStatus(o.id, 'new', 'cash'); setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, servedBy: currentUser.phone } : t)); }} style={{width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Оплату принял (Отправить на кухню)</button>
+               </div>
+            ))}
+          </div>
+
+          {(tables || []).filter(t => t.isCallingForBill && (t.servedBy === currentUser.phone || currentUser.isSenior)).map(table => {
+             const ro = cashPending.find(o => o.tableId === table.id);
+             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) changeOrderStatus(ro.id, 'delivered'); }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
+          })}
+
+          {pickups.length > 0 && (
+            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '24px', marginBottom: '20px', border: '2px dashed #10b981' }}>
+              <h3 style={{color: '#065f46', margin: '0 0 10px 0'}}>🛎️ Забрать с кухни:</h3>
+              <div style={{ display: 'grid', gap: '10px' }}>{pickups.map(o => (<div key={o.id} style={{ background: '#f0fdf4', padding: '12px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{fontSize: '14px', color: '#111827'}}><b>{o.tableName}</b>: {o.itemsText}</span><button onClick={() => changeOrderStatus(o.id, 'delivered')} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Вручено</button></div>))}</div>
+            </div>
+          )}
+          
+          <h2 style={{color: '#111827'}}>Интерактивная карта залов:</h2>
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #d1d5db' }}>
+            {tableGroupsList.map(group => (<button key={group} onClick={() => setSelectedTableGroup(group)} style={{ padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: selectedTableGroup === group ? '#111827' : '#fff', color: selectedTableGroup === group ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{group === 'all' ? 'Все залы' : group}</button>))}
+          </div>
+
+          {filteredTableGroups.map(groupName => {
+            const groupTables = (tables || []).filter(t => t.group === groupName);
+            if(groupTables.length === 0) return null;
+            return (
+              <div key={groupName} style={{ marginTop: '20px' }}>
+                <h3 style={{ paddingBottom: '5px', borderBottom: '2px solid #d1d5db', marginBottom: '10px', color: '#111827' }}>{groupName}</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '15px' }}>
+                  {groupTables.map(t => {
+                    const isMyTable = t.servedBy === currentUser.phone || t.status === 'free';
+                    const canManage = currentUser.isSenior || isMyTable;
+                    
+                    const isCallingMe = t.isCalling && t.calledWaiter === currentUser.phone;
+                    const isCallingSomeoneElse = t.isCalling && t.calledWaiter && t.calledWaiter !== currentUser.phone;
+                    const isGeneralCall = t.isCalling && !t.calledWaiter;
+
+                    return (
+                      <div key={t.id} style={{ padding: '15px', borderRadius: '12px', backgroundColor: isCallingMe || isGeneralCall ? '#fef3c7' : '#fff', border: isCallingMe || isGeneralCall ? '2px solid #f59e0b' : '1px solid #cbd5e1', textAlign: 'center', opacity: canManage ? 1 : 0.6 }}>
+                        <p style={{ margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#111827' }}>{t.name}</p>
+                        <span style={{ fontSize: '12px', color: '#6b7280' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
+                        {t.status !== 'free' && t.servedBy && <p style={{fontSize: '11px', color: '#f59e0b', margin: '4px 0 0 0', fontWeight: 'bold'}}>{roles[t.servedBy]?.name || 'Официант'}</p>}
+                        
+                        {/* ИНФОРМАЦИЯ О БРОНИ ДЛЯ ОФИЦИАНТА */}
+                        {t.bookedBy && t.status === 'free' && (
+                          <div style={{background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '6px', marginTop: '8px'}}>
+                             <p style={{margin: 0, fontWeight: 'bold', fontSize: '12px', color: '#b45309'}}>📅 Бронь на {t.bookedTime}</p>
+                             <div style={{display: 'flex', gap: '5px', marginTop: '5px'}}>
+                               <button onClick={() => alert(`Внимание! Стол в брони на ${t.bookedTime}. Предупредите гостей: вы можете сесть, но столик нужно освободить ровно в ${getEvictionTime(t.bookedTime)}, чтобы мы успели подготовить его к приезду гостей.`)} style={{flex: 1, background: '#b45309', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>ℹ️ Скрипт</button>
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? {...tab, bookedBy: null, bookedTime: null, isCalling: false, calledWaiter: null} : tab))} style={{flex: 1, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Штраф</button>
+                             </div>
+                          </div>
+                        )}
+
+                        {/* ПОДТВЕРЖДЕНИЕ ВЫЗОВА ИЛИ ПРИБЫТИЯ */}
+                        {(isCallingMe || isGeneralCall) && (
+                          <div style={{background: t.callType === 'arrival' ? '#10b981' : '#f59e0b', color: '#fff', padding: '8px', borderRadius: '8px', marginTop: '10px', fontSize: '12px', fontWeight: 'bold'}}>
+                            {t.callType === 'arrival' ? '🙋‍♂️ Гость пришел (Бронь)!' : '🛎 Вас вызывают!'}
+                            {t.callType === 'arrival' ? (
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, isCalling: false, calledWaiter: null, callType: null, status: 'occupied', servedBy: currentUser.phone } : tab))} style={{marginTop: '5px', padding: '5px', width: '100%', background: '#fff', color: '#10b981', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить посадку</button>
+                            ) : (
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, isCalling: false, calledWaiter: null, callType: null } : tab))} style={{marginTop: '5px', padding: '5px', width: '100%', background: '#fff', color: '#f59e0b', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подошел</button>
+                            )}
+                          </div>
+                        )}
+
+                        {isCallingSomeoneElse && (
+                          <div style={{background: '#f3f4f6', color: '#4b5563', padding: '6px', borderRadius: '6px', marginTop: '10px', fontSize: '11px', fontWeight: 'bold'}}>
+                            Вызывает: {roles[t.calledWaiter]?.name || 'Официанта'}
+                          </div>
+                        )}
+                        
+                        <div style={{ display: 'flex', gap: '5px', marginTop: '10px' }}>
+                          <button disabled={!canManage} onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ flex: 1, minWidth: 0, padding: '8px', background: canManage ? '#111827' : '#9ca3af', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: canManage ? 'pointer' : 'not-allowed' }}>+ Чек</button>
+                          {t.status !== 'free' && canManage && <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ padding: '8px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>X</button>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (currentUser.role === 'admin') {
+    const displayedReviews = reviewFilter === 'all' ? (reviews || []) : (reviews || []).filter(r => r.rating === parseInt(reviewFilter));
+    const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
+    const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
+
+    const displayedAdminMenu = adminMenuCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === adminMenuCategory);
+    const staffRolesList = [ { id: 'all', name: 'Все' }, { id: 'waiter', name: 'Официанты' }, { id: 'cook', name: 'Повара' }, { id: 'cashier', name: 'Кассиры' }, { id: 'chef', name: 'Шефы' } ];
+
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
+        
+        {editStaffModal && (
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
+            <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative' }}>
+              <button onClick={() => setEditStaffModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
+              <h3 style={{ margin: '0 0 20px 0', color: '#111827' }}>✏️ Редактировать профиль</h3>
+              
+              <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+                <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Имя Фамилия</label><input type="text" value={editStaffData.name} onChange={e => setEditStaffData({...editStaffData, name: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
+                <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Логин (Номер телефона)</label><input type="text" value={editStaffData.phone} onChange={e => setEditStaffData({...editStaffData, phone: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
+                <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Пароль</label><input type="text" value={editStaffData.password} onChange={e => setEditStaffData({...editStaffData, password: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
+                
+                <div style={{display: 'flex', gap: '10px'}}>
+                  <div style={{flex: 1, minWidth: 0}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Должность</label><select value={editStaffData.role} onChange={e => setEditStaffData({...editStaffData, role: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select></div>
+                  {editStaffData.role === 'cook' && (
+                    <div style={{flex: 1, minWidth: 0}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Цех</label><select value={editStaffData.station} onChange={e => setEditStaffData({...editStaffData, station: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="hot">Горячий</option><option value="cold">Холодный</option><option value="bar">Бар</option><option value="mangal">Мангал</option></select></div>
+                  )}
+                </div>
+
+                <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>График работы</label><input type="text" value={editStaffData.schedule} onChange={e => setEditStaffData({...editStaffData, schedule: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
+
+                {editStaffData.role === 'waiter' && (
+                  <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
+                    <input type="checkbox" checked={editStaffData.isSenior} onChange={e => setEditStaffData({...editStaffData, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
+                    👑 Назначить Старшим официантом
+                  </label>
+                )}
+
+                <button onClick={handleSaveStaff} style={{ width: '100%', padding: '16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '12px', marginTop: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>Сохранить изменения</button>
               </div>
             </div>
           </div>
         )}
 
-        {activeGuestTab === 'table' && (
-          <div className="tables-wrapper">
-            <div className="tables-filter-bar">{tableGroupsList.map(group => (<button key={group} onClick={() => setSelectedTableGroup(group)} className={`filter-btn ${selectedTableGroup === group ? 'active' : ''}`}>{group === 'all' ? t.allHalls : group}</button>))}</div>
+        <header style={{ backgroundColor: '#111827', padding: '20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>💼 Директор</h2>
+          <HeaderControls />
+        </header>
+        <div style={{ display: 'flex', gap: '10px', padding: '20px', justifyContent: 'flex-start', overflowX: 'auto' }}>
+          <button onClick={() => setAdminTab('stats')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'stats' ? '#10b981' : '#e5e7eb', color: adminTab === 'stats' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 Выручка</button>
+          <button onClick={() => setAdminTab('reviews')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'reviews' ? '#f59e0b' : '#e5e7eb', color: adminTab === 'reviews' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>⭐️ Отзывы</button>
+          <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
+          <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#e5e7eb', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
+          <button onClick={() => setAdminTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'tables' ? '#ec4899' : '#e5e7eb', color: adminTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
+          <button onClick={() => setAdminTab('support')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'support' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'support' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>💬 Поддержка</button>
+        </div>
+        
+        {adminTab === 'support' && renderSupportPanel()}
+
+        {adminTab === 'stats' && (
+          <div style={{ padding: '0 20px', maxWidth: '600px', margin: '0 auto' }}>
+            <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '20px', border: '1px solid #e5e7eb', textAlign: 'center', marginBottom: '20px' }}><h2>Общая Касса:</h2><h1 style={{ color: '#10b981', fontSize: '40px', margin: '10px 0' }}>{totalRevenue} ₸</h1></div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' }}>
+              <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                <p style={{margin: '0 0 10px 0', color: '#6b7280', fontWeight: 'bold'}}>По QR</p><p style={{margin: 0, fontSize: '24px', fontWeight: '900', color: '#111827'}}>{analytics?.qr || 0}</p>
+              </div>
+              <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                <p style={{margin: '0 0 10px 0', color: '#6b7280', fontWeight: 'bold'}}>По Ссылке</p><p style={{margin: 0, fontSize: '24px', fontWeight: '900', color: '#111827'}}>{analytics?.link || 0}</p>
+              </div>
+            </div>
+
+            <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 История закрытых заказов:</h3>
+            {validOrders.length === 0 ? <p style={{color: '#6b7280'}}>Заказов пока нет.</p> : 
+              validOrders.map(o => (
+                <div key={o.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', padding: '15px', marginBottom: '15px' }}>
+                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+                     <div>
+                       <span style={{fontWeight: '900', color: '#111827'}}>{o.tableName}</span>
+                       <span style={{background: o.orderType === 'in_hall' ? '#f3f4f6' : '#fff7ed', color: o.orderType === 'in_hall' ? '#4b5563' : '#ea580c', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', marginLeft: '10px', fontWeight: 'bold'}}>{o.orderType === 'in_hall' ? 'В зале' : o.orderType === 'delivery' ? 'Доставка' : 'Навынос'}</span>
+                     </div>
+                     <span style={{fontWeight: '900', color: '#10b981', fontSize: '16px'}}>+ {o.total} ₸</span>
+                   </div>
+                   <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}><b>Заказ:</b> {o.itemsText}</p>
+                   <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
+                      <span>Обслужил(а): {o.waiterName || 'Сайт/Онлайн'}</span>
+                      <span>{o.date}</span>
+                   </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+
+        {adminTab === 'tables' && (
+          <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+            <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>🗺 Контроль залов</h2>
+            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '20px', borderBottom: '1px solid #d1d5db' }}>
+              {tableGroupsList.map(group => (<button key={group} onClick={() => setSelectedTableGroup(group)} style={{ padding: '10px 15px', borderRadius: '12px', border: '1px solid #d1d5db', background: selectedTableGroup === group ? '#111827' : '#fff', color: selectedTableGroup === group ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{group === 'all' ? 'Все залы' : group}</button>))}
+            </div>
+
             {filteredTableGroups.map(groupName => {
               const groupTables = (tables || []).filter(t => t.group === groupName);
-              if (groupTables.length === 0) return null;
+              if(groupTables.length === 0) return null;
               return (
-                <div key={groupName} style={{ marginBottom: '25px', background: '#fff', padding: '15px', borderRadius: '20px', boxSizing: 'border-box' }}>
-                  <h4 style={{ fontSize: '18px', color: '#111827', margin: "0 0 15px 0" }}>📍 {groupName}</h4>
-                  <div className="tables-grid">
-                    {groupTables.map(table => (
-                      <div key={table.id} style={{ padding: '15px 10px', borderRadius: '14px', border: table.bookedBy === currentUser?.phone ? '2px solid #10b981' : '1px solid #e5e7eb', backgroundColor: table.status === 'free' && table.bookedBy ? '#fff7ed' : table.status === 'free' ? '#f8fafc' : '#fff', textAlign: 'center', boxSizing: 'border-box' }}>
-                        <div style={{ fontSize: '30px', marginBottom: '8px' }}>{table.imgUrl ? <img src={table.imgUrl} alt={table.name} style={{width: '45px', height: '45px', borderRadius: '10px', objectFit: 'cover'}}/> : getTableIcon(table.type)}</div>
-                        <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#111827', fontWeight: '800', lineHeight: '1.2' }}>{table.name}</h3>
-                        <p style={{ fontSize: '11px', color: '#6b7280', margin: '0 0 10px 0' }}>Мест: {table.seats}</p>
-                        
-                        {table.bookedBy === currentUser?.phone && !currentUser.isAnonymous ? (
-                          <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-                            <span style={{ background: '#d1fae5', color: '#065f46', padding: '4px 8px', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', display: 'inline-block' }}>
-                              🔒 Ваш стол {table.bookedTime ? `(на ${table.bookedTime})` : ''}
-                            </span>
+                <div key={groupName} style={{ marginTop: '20px' }}>
+                  <h3 style={{ paddingBottom: '5px', borderBottom: '2px solid #d1d5db', marginBottom: '10px', color: '#111827' }}>{groupName}</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
+                    {groupTables.map(t => {
+                       const bookingCust = t.bookedBy ? customers[t.bookedBy] : null;
+                       return (
+                         <div key={t.id} style={{ padding: '15px', borderRadius: '12px', backgroundColor: '#fff', border: t.status === 'free' ? '1px solid #e5e7eb' : '2px solid #111827' }}>
+                            <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                               <p style={{ margin: 0, fontWeight: '900', fontSize: '15px', color: '#111827' }}>{t.name}</p>
+                               <span style={{ fontSize: '11px', fontWeight: 'bold', padding: '3px 8px', borderRadius: '6px', background: t.status === 'free' ? '#f3f4f6' : '#fef3c7', color: t.status === 'free' ? '#6b7280' : '#b45309' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
+                            </div>
                             
-                            {table.status === 'free' && table.bookedTime ? (
-                               <>
-                                 <button onClick={() => { setIsArrivalCall(true); setWaiterCallTableId(table.id); }} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#ea580c', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px', boxShadow: '0 2px 5px rgba(234,88,12,0.3)' }}>🙋‍♂️ Я пришел</button>
-                                 <button onClick={() => handleFreeTable(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: 'transparent', color: '#dc2626', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer' }}>Отменить (без возврата 1000₸)</button>
-                               </>
-                            ) : (
-                               <>
-                                 {(() => {
-                                    const hasOrder = (orders || []).some(o => o.tableId === table.id && o.phone === currentUser.phone && o.status !== 'delivered' && o.status !== 'rejected');
-                                    if (hasOrder) {
-                                      return <button onClick={() => handleChangeTableStart(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #3b82f6', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🔄 Поменять стол</button>;
-                                    } else {
-                                      return <button onClick={() => handleFreeTable(table.id)} style={{ padding: '8px', width: '100%', borderRadius: '8px', border: '1px solid #ef4444', backgroundColor: '#fef2f2', color: '#dc2626', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>🚪 Освободить</button>;
-                                    }
-                                 })()}
-                                 <button onClick={() => { setIsArrivalCall(false); setWaiterCallTableId(table.id); }} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: table.isCalling ? '#f59e0b' : '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '12px' }}>
-                                   {table.isCalling ? 'Идет...' : '🛎️ Официант'}
-                                 </button>
-                               </>
+                            {t.servedBy && <p style={{fontSize: '13px', color: '#4b5563', margin: '8px 0 0 0'}}>🏃‍♂️ Официант: <b>{roles[t.servedBy]?.name || 'Неизвестно'}</b></p>}
+                            
+                            {t.bookedBy && (
+                               <div style={{marginTop: '10px', padding: '10px', background: '#ecfdf5', borderRadius: '8px', border: '1px dashed #10b981'}}>
+                                 <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#065f46', fontWeight: 'bold'}}>📅 Бронь: {t.bookedTime || 'Сейчас'}</p>
+                                 <p style={{margin: 0, fontSize: '12px', color: '#111827'}}>{bookingCust?.name || 'Гость'}<br/>{t.bookedBy}</p>
+                               </div>
                             )}
-                          </div>
-                        ) : table.status === 'free' && table.bookedBy && table.bookedBy !== currentUser?.phone ? (
-                          checkIsBlocked(table.bookedTime) ? (
-                            <div style={{ backgroundColor: '#fef2f2', padding: '10px', borderRadius: '8px', border: '1px solid #dc2626' }}>
-                               <span style={{ color: '#dc2626', fontWeight: '900', fontSize: '11px', display: 'block' }}>⛔ Бронь на {table.bookedTime}</span>
-                               <span style={{ color: '#dc2626', fontSize: '10px' }}>Стол заблокирован</span>
-                            </div>
-                          ) : (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
-                              <span style={{ color: '#f59e0b', fontWeight: 'bold', fontSize: '11px', padding: '4px', background: '#fef3c7', borderRadius: '6px' }}>Бронь на {table.bookedTime}</span>
-                              <button onClick={() => { if(currentUser.isAnonymous) return logout(); bookTableNow(table.id); }} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Сесть (до {getEvictionTime(table.bookedTime)})</button>
-                            </div>
-                          )
-                        ) : table.status === 'free' && !table.bookedBy ? (
-                          isChangingTable ? (
-                            <button onClick={() => handleChangeTableConfirm(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Пересесть сюда</button>
-                          ) : (
-                            <div style={{display: 'flex', flexDirection: 'column', gap: '6px'}}>
-                              <button onClick={() => { if(currentUser.isAnonymous) return logout(); bookTableNow(table.id); }} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Сесть</button>
-                              <button onClick={() => { if(currentUser.isAnonymous) return logout(); initiateBooking(table.id); }} style={{ padding: '8px', borderRadius: '8px', border: '1px solid #d1d5db', backgroundColor: 'transparent', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Бронь</button>
-                            </div>
-                          )
-                        ) : table.status === 'free' && isChangingTable ? (
-                            <button onClick={() => handleChangeTableConfirm(table.id)} style={{ padding: '10px', width: '100%', borderRadius: '8px', border: 'none', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>Пересесть сюда</button>
-                        ) : (
-                          <div style={{ backgroundColor: '#fef2f2', padding: '10px', borderRadius: '8px' }}><span style={{ color: '#dc2626', fontWeight: '900', fontSize: '12px', display: 'block' }}>Занято</span></div>
-                        )}
-                      </div>
-                    ))}
+
+                            {t.status !== 'free' && (
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Освободить стол</button>
+                            )}
+                         </div>
+                       )
+                    })}
                   </div>
                 </div>
               );
@@ -798,107 +756,137 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           </div>
         )}
 
-        {activeGuestTab === 'cart' && (
-          <div className="page-container">
-            <h2 style={{marginTop: 0, marginBottom: '20px', color: '#111827'}}>{t.cart}</h2>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', backgroundColor: '#e5e7eb', padding: '5px', borderRadius: '12px' }}>
-              <button onClick={() => setOrderType('in_hall')} style={{ flex: 1, padding: '10px 5px', borderRadius: '8px', border: 'none', backgroundColor: orderType === 'in_hall' ? '#111827' : 'transparent', color: orderType === 'in_hall' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '13px' }}>{t.inHall}</button>
-              <button onClick={() => setOrderType('takeaway')} style={{ flex: 1, padding: '10px 5px', borderRadius: '8px', border: 'none', backgroundColor: orderType === 'takeaway' ? '#111827' : 'transparent', color: orderType === 'takeaway' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '13px' }}>{t.takeaway}</button>
-              <button onClick={() => setOrderType('delivery')} style={{ flex: 1, padding: '10px 5px', borderRadius: '8px', border: 'none', backgroundColor: orderType === 'delivery' ? '#111827' : 'transparent', color: orderType === 'delivery' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '13px' }}>{t.delivery}</button>
-            </div>
-            {orderType === 'delivery' && (
-              <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '2px solid #ea580c', boxSizing: 'border-box' }}>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-                   <h3 style={{ margin: 0, color: '#111827', fontSize: '16px' }}>📍 {lang === 'ru' ? 'Куда доставить?' : 'Қайда жеткізу керек?'}</h3>
-                   <button onClick={handleGetLocation} style={{background: '#e0f2fe', color: '#0369a1', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'}}>🗺️ {lang === 'ru' ? 'По геоданным' : 'Геодеректер бойынша'}</button>
-                </div>
-                <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе картадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
-                <input type="text" placeholder={lang === 'ru' ? "Комментарий курьеру" : "Курьерге пікір"} value={address.comment} onChange={e=>setAddress({...address, comment: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
-              </div>
-            )}
-            <div style={{backgroundColor: '#fff', borderRadius: '20px', padding: '15px', boxSizing: 'border-box'}}>
-              {cartItemsArray.length === 0 ? <p style={{textAlign: 'center', color: '#6b7280'}}>{t.emptyCart}</p> : cartItemsArray.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f3f4f6' }}>
-                  <div style={{flex: 1, minWidth: 0}}><p style={{ margin: 0, fontWeight: '800', fontSize: '14px', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p><p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>{item.price} ₸</p></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => removeFromCart(item.id)} style={{ width: '32px', height: '32px', background: '#f3f4f6', color: '#111827', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>-</button><span style={{color: '#111827', fontWeight: 'bold'}}>{item.quantity}</span><button onClick={() => addToCart(item)} style={{ width: '32px', height: '32px', background: '#111827', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>+</button></div>
-                </div>
-              ))}
-              {cartItemsArray.length > 0 && <button onClick={() => { if(currentUser.isAnonymous) return logout(); handlePayClick(); }} style={{ width: '100%', padding: '18px', borderRadius: '16px', border: 'none', backgroundColor: '#ea580c', color: '#fff', fontWeight: '900', fontSize: '16px', marginTop: '20px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(234,88,12,0.3)' }}>{t.pay} ({totalAmount} ₸)</button>}
-            </div>
-          </div>
-        )}
+        {adminTab === 'reviews' && (
+          <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
+             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
+               {['all', '5', '4', '3', '2', '1'].map(star => (
+                 <button key={star} onClick={() => setReviewFilter(star)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #d1d5db', background: reviewFilter === star ? '#111827' : '#fff', color: reviewFilter === star ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>
+                   {star === 'all' ? 'Все' : `${star} ⭐️`}
+                 </button>
+               ))}
+             </div>
 
-        {activeGuestTab === 'profile' && (
-          <div className="page-container">
-            {currentUser.isAnonymous ? (
-              <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '20px', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
-                <div style={{ fontSize: '50px', marginBottom: '10px' }}>🎁</div>
-                <h2 style={{ margin: '0 0 10px 0', color: '#111827', fontSize: '22px' }}>{lang === 'ru' ? 'Вы не авторизованы' : 'Сіз жүйеге кірмедіңіз'}</h2>
-                <p style={{ color: '#6b7280', marginBottom: '20px', fontSize: '14px', lineHeight: '1.4' }}>{lang === 'ru' ? 'Войдите в систему или создайте карту лояльности за 10 секунд, чтобы получать кэшбек с каждого заказа и бронировать столики.' : 'Әр тапсырыстан кэшбек алу және үстелдерді брондау үшін жүйеге кіріңіз немесе 10 секунд ішінде тіркеліңіз.'}</p>
-                <button onClick={logout} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#ea580c', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Войти / Создать карту' : 'Кіру / Карта жасау'}</button>
-              </div>
-            ) : (
-              <>
-                <div style={{ backgroundColor: '#111827', padding: '25px', borderRadius: '20px', color: '#fff', marginBottom: '20px' }}>
-                  <h2 style={{ margin: '0 0 10px 0', color: '#fff' }}>{currentUser.name}</h2>
-                  <p style={{ color: '#10b981', fontSize: '24px', fontWeight: '900', margin: 0 }}>Кэшбек: {availableBonuses} ₸</p>
-                </div>
-
-                <button onClick={handleInstallClick} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                   📱 {lang === 'ru' ? 'Установить приложение' : 'Қосымшаны орнату'}
-                </button>
-
-                <button onClick={() => setShowSupportModal(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                   💬 {lang === 'ru' ? 'Написать разработчикам' : 'Қолдау қызметіне жазу'}
-                </button>
-
-                <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>{t.orderHistory}:</h3>
-                {myOrdersHistory.length === 0 ? <p style={{color: '#6b7280'}}>{t.noOrders}</p> : 
-                  myOrdersHistory.map(o => (
-                    <div key={o.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '16px', padding: '15px', marginBottom: '15px' }}>
-                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px'}}>
-                         <span style={{fontWeight: '900', color: '#111827'}}>{o.tableName}</span>
-                         <span style={{fontWeight: '900', color: '#10b981', fontSize: '16px'}}>{o.total} ₸</span>
+             {displayedReviews.length === 0 ? <p style={{textAlign: 'center', color: '#6b7280'}}>Отзывов пока нет.</p> : 
+               displayedReviews.map(rev => (
+                 <div key={rev.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '15px' }}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px'}}>
+                       <div>
+                          <p style={{margin: '0 0 5px 0', fontWeight: 'bold', color: '#111827'}}>{rev.author}</p>
+                          <p style={{margin: 0, fontSize: '13px', color: '#6b7280'}}>Обслуживал: {rev.targetName}</p>
                        </div>
-                       <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: o.status === 'rejected' ? '#dc2626' : o.status === 'transfer_pending' ? '#f59e0b' : '#10b981'}}>
-                         {o.status === 'rejected' ? (lang === 'ru' ? 'Оплата отменена' : 'Төлемнен бас тартылды') : 
-                          o.status === 'transfer_pending' ? (lang === 'ru' ? 'Ожидание проверки оплаты' : 'Төлемді тексеру күтілуде') : 
-                          (lang === 'ru' ? `Оплачено (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'})` : `Төленді (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Қолма-қол'})`)}
-                       </p>
-                       <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>{o.itemsText}</p>
-                       <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#9ca3af', marginTop: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '10px'}}>
-                          <span>{o.date}</span>
+                       <div style={{textAlign: 'right'}}>
+                          <p style={{margin: '0 0 5px 0', color: '#f59e0b', fontSize: '18px'}}>{'★'.repeat(rev.rating)}{'☆'.repeat(5-rev.rating)}</p>
+                          <p style={{margin: 0, fontSize: '12px', color: '#9ca3af'}}>{rev.date}</p>
                        </div>
                     </div>
-                  ))
-                }
-                <button onClick={logout} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', background: '#fff', color: '#ef4444', fontWeight: 'bold', marginTop: '20px', cursor: 'pointer' }}>{lang === 'ru' ? 'Выйти из аккаунта' : 'Аккаунттан шығу'}</button>
-              </>
-            )}
+                    {rev.text && <p style={{margin: '10px 0 0 0', padding: '12px', background: '#f9fafb', borderRadius: '8px', fontSize: '14px', color: '#4b5563'}}>{rev.text}</p>}
+                 </div>
+               ))
+             }
           </div>
         )}
-      </main>
 
-      {/* ФИКС ДЫРКИ: Скрываем нижний бар при открытых модалках */}
-      {!isAnyModalOpen && (
-        <nav className="mobile-nav">
-          <button className={`nav-item ${activeGuestTab === 'menu' ? 'active' : ''}`} onClick={() => setActiveGuestTab('menu')}><span className="nav-icon">🍔</span> {t.menu}</button>
-          <button className={`nav-item ${activeGuestTab === 'table' ? 'active' : ''}`} onClick={() => setActiveGuestTab('table')}><span className="nav-icon">🪑</span> {t.halls}</button>
-          <button className={`nav-item ${activeGuestTab === 'cart' ? 'active' : ''}`} onClick={() => setActiveGuestTab('cart')}>
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <span className="nav-icon">🛒</span>
-              {totalItemsCount > 0 && (
-                <span style={{ position: 'absolute', top: '-8px', right: '-12px', background: '#ef4444', color: '#fff', borderRadius: '10px', padding: '1px 5px', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '900', border: '2px solid #fff' }}>
-                  {totalItemsCount}
-                </span>
-              )}
+        {adminTab === 'menu' && (
+          <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
+            
+            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #d1d5db' }}>
+              <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Добавить блюдо:</h4>
+              <input type="text" placeholder="Название" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+              <input type="text" placeholder="Ингредиенты (например: говядина, лук, соус)" value={newItem.ingredients} onChange={e => setNewItem({...newItem, ingredients: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+              <div style={{display: 'flex', gap: '10px'}}>
+                 <input type="number" placeholder="Цена" value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+                 <select value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}>{CATEGORIES.filter(c=>c.id!=='all').map(c=>(<option key={c.id} value={c.id}>{c.name}</option>))}</select>
+              </div>
+              <button onClick={handleAddMenuItem} style={{ width: '100%', padding: '14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Опубликовать</button>
             </div>
-            {t.cart}
-          </button>
-          <button className={`nav-item ${activeGuestTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveGuestTab('profile')}><span className="nav-icon">👤</span> {t.profile}</button>
-        </nav>
-      )}
-    </div>
-  );
+
+            <h3 style={{color: '#111827', marginBottom: '15px'}}>Управление меню:</h3>
+            
+            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
+              {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {displayedAdminMenu.map(item => (
+                <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr auto auto', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb' }}>
+                  <div style={{fontSize: '25px', display: 'flex', justifyContent: 'center'}}>
+                    {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}
+                  </div>
+                  <div style={{minWidth: 0}}>
+                    <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold' }}>{item.price} ₸</p>
+                  </div>
+                  <label style={{ cursor: 'pointer', padding: '8px 10px', borderRadius: '8px', backgroundColor: '#e0f2fe', color: '#0369a1', fontWeight: 'bold', fontSize: '12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    📷 Фото
+                    <input type="file" accept="image/*" capture="environment" style={{display: 'none'}} onChange={(e) => handlePhotoUpload(e, item.id)} />
+                  </label>
+                  <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                     <button onClick={() => toggleStopList(item.id)} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', backgroundColor: item.isStop ? '#d1fae5' : '#fee2e2', color: item.isStop ? '#065f46' : '#dc2626', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' }}>{item.isStop ? 'Включить' : 'В стоп'}</button>
+                     <button onClick={() => setMenu((menu || []).filter(m => m.id !== item.id))} style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#f3f4f6', color: '#4b5563', border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: '11px' }}>Удалить</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'staff' && (
+          <div style={{ padding: '0 20px', maxWidth: '700px', margin: '0 auto' }}>
+            <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
+              <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Новый сотрудник:</h4>
+              <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+              
+              <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
+                 <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+                 <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+              </div>
+
+              <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
+                <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select>
+                {newWaiter.role === 'cook' && (
+                   <select value={newWaiter.station} onChange={e => setNewWaiter({...newWaiter, station: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}>
+                     <option value="hot">Горячий цех</option><option value="cold">Холодный цех</option><option value="bar">Бар</option><option value="mangal">Мангал</option>
+                   </select>
+                )}
+              </div>
+              
+              <input type="text" placeholder="График (напр. 2/2 или ПН-ПТ)" value={newWaiter.schedule} onChange={e => setNewWaiter({...newWaiter, schedule: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+              
+              {newWaiter.role === 'waiter' && (
+                <label style={{display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', color: '#111827', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer'}}>
+                  <input type="checkbox" checked={newWaiter.isSenior} onChange={e => setNewWaiter({...newWaiter, isSenior: e.target.checked})} style={{width: '20px', height: '20px', cursor: 'pointer'}} />
+                  👑 Назначить Старшим официантом
+                </label>
+              )}
+
+              <button onClick={handleAddWaiter} style={{ width: '100%', padding: '14px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '10px', marginTop: '15px', fontWeight: 'bold', cursor: 'pointer' }}>Добавить сотрудника</button>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
+              {staffRolesList.map(role => (<button key={role.id} onClick={() => setAdminStaffRole(role.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminStaffRole === role.id ? '#8b5cf6' : '#f3f4f6', color: adminStaffRole === role.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{role.name}</button>))}
+            </div>
+
+            {Object.entries(roles || {}).filter(([phone, data]) => data.role !== 'admin' && data.role !== 'developer' && (adminStaffRole === 'all' || data.role === adminStaffRole)).map(([phone, data]) => (
+              <div key={phone} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e5e7eb', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: '900', color: '#111827', fontSize: '16px' }}>{data.name} {data.isSenior ? '👑' : ''}</p>
+                    <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280' }}>Логин: <b>{phone}</b> | Роль: {data.role === 'cook' ? `Повар (${data.station})` : data.role === 'waiter' ? 'Официант' : data.role === 'cashier' ? 'Кассир' : 'Шеф'}</p>
+                    <p style={{ margin: '4px 0', fontSize: '13px', color: '#6b7280' }}>График: <b>{data.schedule || 'Не указан'}</b> | Доступ: {data.onShift ? '✅ Открыт' : '❌ Закрыт'}</p>
+                  </div>
+                  
+                  <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                     <button onClick={() => openEditStaffModal(phone, data)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>✏️ Изменить</button>
+                     <button onClick={() => toggleWaiterShift(phone)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: data.onShift ? '#fee2e2' : '#d1fae5', color: data.onShift ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>{data.onShift ? 'Заблокировать' : 'Разблокировать'}</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }

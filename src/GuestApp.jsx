@@ -136,9 +136,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (checkOrder) {
         if (checkOrder.status === 'new') { 
-          // Отправляем заказ в Палому на кухонный принтер, если кассир подтвердил
           sendToPaloma(checkOrder);
-
           if (checkOrder.orderType === 'booking_deposit') {
              setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
              setPaymentStatus('booking_success');
@@ -147,8 +145,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           }
           setPendingOrderId(null); 
         } 
-        else if (checkOrder.status === 'rejected') { 
-          // Кассир нажал "Денег нет" - сразу выкидываем ошибку (Экран повторите попытку)
+        else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined') { 
+          // ИСПРАВЛЕНИЕ: Мгновенный перехват статуса rejected (Деньги не поступили)
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 
         }
@@ -258,7 +256,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     if (orderType === 'delivery' && !address.street) return alert("Укажите адрес доставки или используйте геоданные!");
     if (orderType === 'in_hall' && !activeTable) return alert(lang === 'ru' ? 'Оплата в зале доступна только при заказе за столиком в заведении!' : 'Залда төлеу тек залда отырғанда ғана мүмкін!');
 
-    // ОБЯЗАТЕЛЬНЫЙ ВЫБОР ОФИЦИАНТА, ЕСЛИ ЗАКАЗ В ЗАЛЕ
     if (orderType === 'in_hall') {
       setPaymentStatus('select_waiter');
     } else {
@@ -419,7 +416,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
          </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ИНФОРМАЦИИ (ОНБОРДИНГ) --- */}
       {showInfoModal && (
         <div className="payment-overlay" onClick={() => setShowInfoModal(false)}>
           <div className="payment-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'left', padding: '30px 20px', overflowY: 'auto'}}>
@@ -472,7 +468,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
-      {/* --- МОДАЛЬНОЕ ОКНО ТЕХПОДДЕРЖКИ --- */}
       {showSupportModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: '#f4f5f7', zIndex: 99999, display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -715,11 +710,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ЭКРАН ОТКЛОНЕНИЯ С НУЖНЫМ ТЕКСТОМ (ОБРАБАТЫВАЕТ СТАТУС REJECTED ОТ КАССИРА) */}
+            {/* ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Попробуйте снова, деньги не поступили!</h2>
+                <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Подтвердите попытку, деньги не поступили!</h2>
                 <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Кассир не смог подтвердить ваш перевод. Пожалуйста, проверьте статус платежа в приложении банка.</p>
                 <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
               </div>

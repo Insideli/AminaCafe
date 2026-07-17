@@ -1,3 +1,4 @@
+// StaffApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
@@ -526,6 +527,17 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const cashPendingTables = (tables || []).filter(t => t.isCallingForBill);
     const posTotal = Object.values(cashierCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
 
+    // НОВОЕ: Группировка наличной выручки по официантам
+    const waitersCashMap = {};
+    validOrders.filter(o => o.payMethod === 'cash').forEach(o => {
+        if (o.waiterPhone) {
+            if (!waitersCashMap[o.waiterPhone]) {
+                waitersCashMap[o.waiterPhone] = { name: o.waiterName || 'Официант', total: 0 };
+            }
+            waitersCashMap[o.waiterPhone].total += o.total;
+        }
+    });
+
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
         {renderInfoModal()}
@@ -534,7 +546,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <HeaderControls />
         </header>
         
-        {/* НАВИГАЦИЯ КАССИРА (ДОБАВЛЕНА КАРТА ЗАЛОВ) */}
+        {/* НАВИГАЦИЯ КАССИРА */}
         <div style={{ display: 'flex', gap: '10px', padding: '20px', justifyContent: 'flex-start', overflowX: 'auto', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
           <button onClick={() => setCashierTab('orders')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'orders' ? '#10b981' : '#f3f4f6', color: cashierTab === 'orders' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🔔 Оплаты</button>
           <button onClick={() => setCashierTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'tables' ? '#ec4899' : '#f3f4f6', color: cashierTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
@@ -663,6 +675,19 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                </div>
             </div>
 
+            {/* НОВЫЙ БЛОК: Кассы официантов */}
+            {Object.keys(waitersCashMap).length > 0 && (
+                <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', marginBottom: '20px' }}>
+                    <h3 style={{ margin: '0 0 15px 0', color: '#111827' }}>💵 Наличные у официантов:</h3>
+                    {Object.entries(waitersCashMap).map(([phone, data]) => (
+                        <div key={phone} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: '10px', marginBottom: '10px' }}>
+                            <span style={{ color: '#4b5563', fontWeight: 'bold' }}>{data.name}</span>
+                            <span style={{ color: '#10b981', fontWeight: '900' }}>{data.total} ₸</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>🧾 Лента чеков:</h3>
             {validOrders.length === 0 ? <p style={{color: '#6b7280'}}>Чеков пока нет.</p> : 
               validOrders.map(o => (
@@ -758,8 +783,16 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   }
 
   if (currentUser.role === 'waiter') {
-    const pickups = (orders || []).filter(o => o.status === 'ready_for_pickup' && o.orderType !== 'delivery');
-    const cashPending = (orders || []).filter(o => (o.status === 'cash_pending' || o.status === 'cooking') && o.orderType === 'in_hall');
+    // ВАЖНОЕ ИЗМЕНЕНИЕ ДЛЯ ОФИЦИАНТОВ: Видимость заказов
+    // Теперь официант будет видеть все заказы стола, за который он отвечает
+    const myTableIds = (tables || []).filter(t => t.servedBy === currentUser.phone).map(t => t.id);
+    const myActiveOrders = (orders || []).filter(o => 
+       myTableIds.includes(o.tableId) && 
+       (o.status === 'new' || o.status === 'cooking' || o.status === 'ready_for_pickup' || o.status === 'cash_pending')
+    );
+
+    const pickups = myActiveOrders.filter(o => o.status === 'ready_for_pickup');
+    const cashPending = myActiveOrders.filter(o => o.status === 'cash_pending' || o.status === 'cooking');
     
     const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
     const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
@@ -794,6 +827,24 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                </div>
             ))}
           </div>
+
+          {/* НОВЫЙ БЛОК ДЛЯ ОФИЦИАНТОВ: Заказы их столов */}
+          {myActiveOrders.length > 0 && (
+             <div style={{ backgroundColor: '#fff', border: '2px solid #3b82f6', padding: '20px', borderRadius: '24px', marginBottom: '25px' }}>
+                <h3 style={{ color: '#1d4ed8', margin: '0 0 15px 0' }}>📋 Активные заказы ваших столов</h3>
+                {myActiveOrders.map(o => (
+                   <div key={o.id} style={{ background: '#eff6ff', padding: '12px', borderRadius: '10px', marginBottom: '10px' }}>
+                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                        <span style={{fontWeight: 'bold', color: '#111827'}}>{o.tableName}</span>
+                        <span style={{color: o.status === 'ready_for_pickup' ? '#10b981' : '#f59e0b', fontWeight: 'bold', fontSize: '12px'}}>
+                          {o.status === 'ready_for_pickup' ? 'Готово!' : 'Готовится'}
+                        </span>
+                      </div>
+                      <p style={{margin: '5px 0 0 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>{o.itemsText}</p>
+                   </div>
+                ))}
+             </div>
+          )}
 
           {(tables || []).filter(t => t.isCallingForBill && (t.servedBy === currentUser.phone || currentUser.isSenior)).map(table => {
              const ro = cashPending.find(o => o.tableId === table.id);

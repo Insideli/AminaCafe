@@ -123,23 +123,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     return () => { document.body.style.overflow = 'auto'; };
   }, [isAnyModalOpen]);
 
-  // СИНХРОНИЗАЦИЯ ДАННЫХ ДЛЯ КЛИЕНТА (чтобы часы не тикали бесконечно)
-  useEffect(() => {
-    const sync = (e) => {
-      try {
-        if (!e.newValue) return; const parsed = JSON.parse(e.newValue);
-        if (e.key === 'amina_orders_v12') setOrders(parsed || []);
-        if (e.key === 'amina_tables_v12') setTables(parsed || []);
-        if (e.key === 'amina_menu_v12') setMenu(parsed || []);
-        if (e.key === 'amina_customers_v12') setCustomers(parsed || {});
-        if (e.key === 'amina_support_v12') setSupportChat(parsed || []);
-        if (e.key === 'amina_roles_v12') setRoles(parsed || {});
-        if (e.key === 'amina_reviews_v12') setReviews(parsed || []);
-      } catch (err) {}
-    };
-    window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync);
-  }, []);
-
   useEffect(() => {
     let meta = document.querySelector('meta[name="viewport"]');
     if (!meta) { meta = document.createElement('meta'); meta.name = "viewport"; document.head.appendChild(meta); }
@@ -720,7 +703,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
                 <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Повторите попытку!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Деньги не поступили!</p>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Деньги не поступили. Попробуйте еще раз или обратитесь в техподдержку.</p>
                 <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
               </div>
             )}

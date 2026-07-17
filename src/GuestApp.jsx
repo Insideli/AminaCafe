@@ -1,3 +1,4 @@
+// GuestApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
@@ -255,7 +256,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const handlePayClick = () => {
     if (cartItemsArray.length === 0 && !isPreOrderFlow) return alert("Выберите блюда!");
     if (orderType === 'delivery' && !address.street) return alert("Укажите адрес доставки или используйте геоданные!");
-    setPaymentStatus('select_method'); 
+    if (orderType === 'in_hall' && !activeTable) return alert(lang === 'ru' ? 'Оплата в зале доступна только при заказе за столиком в заведении!' : 'Залда төлеу тек залда отырғанда ғана мүмкін!');
+
+    // ОБЯЗАТЕЛЬНЫЙ ВЫБОР ОФИЦИАНТА, ЕСЛИ ЗАКАЗ В ЗАЛЕ
+    if (orderType === 'in_hall') {
+      setPaymentStatus('select_waiter');
+    } else {
+      setPaymentStatus('select_method'); 
+    }
   };
 
   const confirmTransfer = () => {
@@ -606,10 +614,19 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
             {paymentStatus === 'select_waiter' && (
               <>
                  <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
-                  <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
+                  {/* Кнопка "Назад" возвращает к выбору метода только если это не заказ в зале */}
+                  {orderType !== 'in_hall' ? (
+                     <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
+                  ) : (
+                     <button onClick={() => setPaymentStatus('idle')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>✕</button>
+                  )}
                   <h2 style={{margin: 0, fontSize: '20px', fontWeight: '900', color: '#111827'}}>Кто вас обслужит?</h2>
                 </div>
-                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px'}}>Выберите официанта по отзывам для оплаты наличными.</p>
+                <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px'}}>
+                   {orderType === 'in_hall' 
+                     ? 'Выберите вашего официанта для оформления заказа в зале.' 
+                     : 'Выберите официанта по отзывам для оплаты наличными.'}
+                </p>
 
                 <button onClick={selectRandomWaiter} style={{width: '100%', padding: '16px', borderRadius: '14px', border: '2px dashed #111827', background: '#f9fafb', color: '#111827', fontWeight: '900', fontSize: '15px', cursor: 'pointer', marginBottom: '15px'}}>🎲 Мне лень, выберите случайно</button>
 
@@ -698,12 +715,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* НОВЫЙ ЭКРАН ОТКЛОНЕНИЯ */}
+            {/* ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ С НУЖНЫМ ТЕКСТОМ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Повторите попытку!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Деньги не поступили. Попробуйте еще раз или обратитесь в техподдержку.</p>
+                <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Попробуйте снова, деньги не поступили!</h2>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Кассир не смог подтвердить ваш перевод. Пожалуйста, проверьте статус платежа в приложении банка.</p>
                 <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
               </div>
             )}

@@ -148,7 +148,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           setPendingOrderId(null); 
         } 
         else if (checkOrder.status === 'rejected') { 
-          // Кассир нажал "Денег нет" - сразу выкидываем ошибку
+          // Кассир нажал "Денег нет" - сразу выкидываем ошибку (Экран повторите попытку)
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 
         }
@@ -715,7 +715,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ С НУЖНЫМ ТЕКСТОМ */}
+            {/* ЭКРАН ОТКЛОНЕНИЯ С НУЖНЫМ ТЕКСТОМ (ОБРАБАТЫВАЕТ СТАТУС REJECTED ОТ КАССИРА) */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
@@ -928,7 +928,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                    <h3 style={{ margin: 0, color: '#111827', fontSize: '16px' }}>📍 {lang === 'ru' ? 'Куда доставить?' : 'Қайда жеткізу керек?'}</h3>
                    <button onClick={handleGetLocation} style={{background: '#e0f2fe', color: '#0369a1', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'}}>🗺️ {lang === 'ru' ? 'По геоданным' : 'Геодеректер бойынша'}</button>
                 </div>
-                <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе картадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
+                <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе্থкартадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
                 <input type="text" placeholder={lang === 'ru' ? "Комментарий курьеру" : "Курьерге пікір"} value={address.comment} onChange={e=>setAddress({...address, comment: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
               </div>

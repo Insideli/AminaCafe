@@ -1,0 +1,14 @@
+# Секретные ключи (никогда не загружать на GitHub!)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Папки с зависимостями и сборкой
+node_modules/
+dist/
+build/
+
+# Файлы системы (Mac/Windows)
+.DS_Store

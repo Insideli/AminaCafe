@@ -51,7 +51,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   // ИНТЕГРАЦИЯ PALOMA POS
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
-    // Как только будет API ключ, раскомментируем код ниже:
     /*
     try {
       await fetch('https://api.paloma365.com/v1/orders', {
@@ -410,7 +409,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                    <div style={{ flex: 1, paddingRight: '10px' }}><div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '30px', height: '30px', borderRadius: '8px', objectFit: 'cover'}}/> : <span>{item.img}</span>}<p style={{margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#111827'}}>{item.name}</p></div><p style={{margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px'}}>{item.price} ₸</p></div>
                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}><button onClick={() => removeFromPosCart(item.id)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827' }}>-</button><span style={{fontWeight: 'bold', fontSize: '16px', color: '#111827'}}>{(posCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToPosCart(item)} style={{ padding: '8px 15px', borderRadius: '10px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff' }}>+</button></div>
                 </div>
-              ))}
+              ))} 
            </div>
            <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb' }}><p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '20px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого чек:</span> <span>{posTotal} ₸</span></p><button onClick={submitPosOrder} style={{ width: '100%', padding: '18px', borderRadius: '14px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '16px' }}>Отправить на кухню</button></div>
          </div>
@@ -797,22 +796,52 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         {renderWaiterMenuModal()}
         {renderInfoModal()}
 
+        {/* Модальное окно с чеком */}
         {viewReceiptOrder && (
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
-            <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '450px', position: 'relative', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
               <button onClick={() => setViewReceiptOrder(null)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
-              <h3 style={{ margin: '0 0 15px 0', color: '#111827' }}>🧾 Чек: {viewReceiptOrder.tableName}</h3>
-              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              
+              <h3 style={{ margin: '0 0 15px 0', color: '#111827', textAlign: 'center' }}>🧾 Чек: {viewReceiptOrder.tableName}</h3>
+              
+              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {/* Информация о заказе */}
+                <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '10px', marginBottom: '10px' }}>
+                   <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#4b5563' }}>
+                     <b>Гость:</b> {viewReceiptOrder.phone.startsWith('waiter-') ? 'Официант' : (customers[viewReceiptOrder.phone]?.name || 'Сайт')}
+                   </p>
+                   <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#4b5563' }}>
+                     <b>Способ оплаты:</b> {viewReceiptOrder.payMethod === 'kaspi' ? '💳 Kaspi' : viewReceiptOrder.payMethod === 'cash' ? '💵 Наличные' : 'Не указан'}
+                   </p>
+                   <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#4b5563' }}>
+                     <b>Оформил:</b> {viewReceiptOrder.waiterName || 'Сайт'}
+                   </p>
+                   <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#4b5563' }}>
+                     <b>Статус:</b> <span style={{ fontWeight: 'bold', color: viewReceiptOrder.status === 'ready_for_pickup' ? '#10b981' : viewReceiptOrder.status === 'delivered' ? '#6b7280' : '#f59e0b' }}>
+                       {viewReceiptOrder.status === 'new' ? '✅ Новый' : 
+                        viewReceiptOrder.status === 'cooking' ? '🍳 Готовится' : 
+                        viewReceiptOrder.status === 'ready_for_pickup' ? '🛎️ Готово' : 
+                        viewReceiptOrder.status === 'delivered' ? '✅ Доставлен' : 
+                        viewReceiptOrder.status === 'cash_pending' ? '💵 Ожидает оплаты' : viewReceiptOrder.status}
+                     </span>
+                   </p>
+                   <p style={{ margin: '0', fontSize: '12px', color: '#9ca3af' }}>
+                     <b>Время:</b> {viewReceiptOrder.date}
+                   </p>
+                </div>
+
+                {/* Список блюд */}
                 {viewReceiptOrder.cartItems?.map((item, idx) => (
                   <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: '8px' }}>
-                    <span style={{color: '#111827', fontSize: '14px', flex: 1}}>{item.name} <b style={{color: '#ef4444'}}>x{item.quantity}</b></span>
+                    <span style={{color: '#111827', fontSize: '14px', flex: 1}}>{item.img} {item.name} <b style={{color: '#ef4444'}}>x{item.quantity}</b></span>
                     <span style={{color: '#6b7280', fontSize: '14px', whiteSpace: 'nowrap', marginLeft: '10px'}}>{item.price * item.quantity} ₸</span>
                   </div>
                 ))}
                 {(!viewReceiptOrder.cartItems || viewReceiptOrder.cartItems.length === 0) && (
-                   <p style={{color: '#6b7280', fontSize: '14px'}}>{viewReceiptOrder.itemsText}</p>
+                   <p style={{color: '#6b7280', fontSize: '14px', textAlign: 'center', padding: '10px 0'}}>{viewReceiptOrder.itemsText}</p>
                 )}
               </div>
+              
               <p style={{ margin: '15px 0 0 0', fontWeight: '900', fontSize: '18px', textAlign: 'right', color: '#111827', borderTop: '2px solid #f3f4f6', paddingTop: '15px' }}>Итого: {viewReceiptOrder.total} ₸</p>
             </div>
           </div>
@@ -828,6 +857,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
         <div style={{ padding: '20px' }}>
           
+          {/* Блок вызова официанта на оплату */}
           <div style={{ backgroundColor: '#fff', border: '4px solid #10b981', padding: '20px', borderRadius: '24px', marginBottom: '25px', boxShadow: '0 10px 25px rgba(16, 185, 129, 0.2)', display: (orders || []).filter(o => o.status === 'waiter_pending' && o.waiterPhone === currentUser.phone).length === 0 ? 'none' : 'block' }}>
             <h2 style={{color: '#065f46', margin: '0 0 15px 0', fontSize: '18px'}}>🏃‍♂️ Вас вызвали для оплаты!</h2>
             {(orders || []).filter(o => o.status === 'waiter_pending' && o.waiterPhone === currentUser.phone).map(o => (
@@ -843,32 +873,13 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             ))}
           </div>
 
-          {myActiveOrders.length > 0 && (
-             <div style={{ backgroundColor: '#fff', border: '2px solid #3b82f6', padding: '20px', borderRadius: '24px', marginBottom: '25px' }}>
-                <h3 style={{ color: '#1d4ed8', margin: '0 0 15px 0' }}>📋 Активные заказы ваших столов</h3>
-                {myActiveOrders.map(o => (
-                   <div key={o.id} style={{ background: '#eff6ff', padding: '12px', borderRadius: '10px', marginBottom: '10px' }}>
-                      <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                        <span style={{fontWeight: 'bold', color: '#111827'}}>{o.tableName}</span>
-                        <span style={{color: o.status === 'ready_for_pickup' ? '#10b981' : '#f59e0b', fontWeight: 'bold', fontSize: '12px'}}>
-                          {o.status === 'ready_for_pickup' ? 'Готово!' : 'Готовится'}
-                        </span>
-                      </div>
-                      
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px'}}>
-                        <span style={{fontWeight: 'bold', color: '#111827', fontSize: '15px'}}>{o.total} ₸</span>
-                        <button onClick={() => setViewReceiptOrder(o)} style={{padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px'}}>🧾 Чек</button>
-                      </div>
-                   </div>
-                ))}
-             </div>
-          )}
-
+          {/* СТОЛЫ ПРОСЯТ СЧЕТ */}
           {(tables || []).filter(t => t.isCallingForBill && (t.servedBy === currentUser.phone || currentUser.isSenior)).map(table => {
              const ro = cashPending.find(o => o.tableId === table.id);
              return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) changeOrderStatus(ro.id, 'delivered'); }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
           })}
 
+          {/* ГОТОВО ЗАБРАТЬ С КУХНИ */}
           {pickups.length > 0 && (
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '24px', marginBottom: '20px', border: '2px dashed #10b981' }}>
               <h3 style={{color: '#065f46', margin: '0 0 10px 0'}}>🛎️ Забрать с кухни:</h3>
@@ -887,7 +898,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             return (
               <div key={groupName} style={{ marginTop: '20px' }}>
                 <h3 style={{ paddingBottom: '5px', borderBottom: '2px solid #d1d5db', marginBottom: '10px', color: '#111827' }}>{groupName}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '15px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
                   {groupTables.map(t => {
                     const isMyTable = t.servedBy === currentUser.phone || t.status === 'free';
                     const canManage = currentUser.isSenior || isMyTable;
@@ -895,6 +906,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     const isCallingMe = t.isCalling && t.calledWaiter === currentUser.phone;
                     const isCallingSomeoneElse = t.isCalling && t.calledWaiter && t.calledWaiter !== currentUser.phone;
                     const isGeneralCall = t.isCalling && !t.calledWaiter;
+
+                    // Находим заказы для этого стола
+                    const tableOrders = (orders || []).filter(o => 
+                       o.tableId === t.id && 
+                       (o.status === 'new' || o.status === 'cooking' || o.status === 'ready_for_pickup' || o.status === 'cash_pending' || o.status === 'delivered')
+                    );
 
                     return (
                       <div key={t.id} style={{ padding: '15px', borderRadius: '12px', backgroundColor: isCallingMe || isGeneralCall ? '#fef3c7' : '#fff', border: isCallingMe || isGeneralCall ? '2px solid #f59e0b' : '1px solid #cbd5e1', textAlign: 'center', opacity: canManage ? 1 : 0.6 }}>
@@ -940,6 +957,17 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         
                         <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap' }}>
                           <button disabled={!canManage} onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ flex: 1, minWidth: '100%', padding: '8px', background: canManage ? '#111827' : '#9ca3af', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: canManage ? 'pointer' : 'not-allowed' }}>+ Чек</button>
+                          
+                          {/* 🔥 НОВАЯ КНОПКА ЧЕК В КАРТОЧКЕ СТОЛА */}
+                          {tableOrders.length > 0 && canManage && (
+                            <button onClick={() => {
+                              // Берем последний активный заказ для этого стола
+                              const orderToShow = tableOrders[tableOrders.length - 1];
+                              setViewReceiptOrder(orderToShow);
+                            }} style={{ flex: 1, minWidth: '100%', padding: '8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                              🧾 Чек ({tableOrders.length})
+                            </button>
+                          )}
                           
                           {t.status !== 'free' && canManage && (
                              t.bookedTime ? (
@@ -990,7 +1018,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                   <div style={{flex: 1, minWidth: 0}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Должность</label><select value={editStaffData.role} onChange={e => setEditStaffData({...editStaffData, role: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="waiter">Официант</option><option value="cook">Повар</option><option value="chef">Шеф Повар</option><option value="cashier">Кассир</option></select></div>
                   {editStaffData.role === 'cook' && (
                     <div style={{flex: 1, minWidth: 0}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Цех</label><select value={editStaffData.station} onChange={e => setEditStaffData({...editStaffData, station: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="hot">Горячий</option><option value="cold">Холодный</option><option value="bar">Бар</option><option value="mangal">Мангал</option></select></div>
-                  )}
+                  )} 
                 </div>
 
                 <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>График работы</label><input type="text" value={editStaffData.schedule} onChange={e => setEditStaffData({...editStaffData, schedule: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>

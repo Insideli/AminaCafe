@@ -3,14 +3,15 @@ import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
-  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
-  const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
-  const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []); 
+  // 🔥 Версия базы данных изменена на v13 для полной очистки!
+  const [menu, setMenu] = useLocalStorage('amina_menu_v13', INITIAL_MENU);
+  const [tables, setTables] = useLocalStorage('amina_tables_v13', INITIAL_TABLES);
+  const [orders, setOrders] = useLocalStorage('amina_orders_v13', []);
+  const [customers, setCustomers] = useLocalStorage('amina_customers_v13', INITIAL_CUSTOMERS);
+  const [roles, setRoles] = useLocalStorage('amina_roles_v13', INITIAL_ROLES);
+  const [reviews, setReviews] = useLocalStorage('amina_reviews_v13', []); 
   
-  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
+  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v13', INITIAL_SUPPORT);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
 

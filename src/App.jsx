@@ -34,9 +34,11 @@ function useDeviceStorage(key, initialValue) {
 
 function MainApp() {
   const [showSplash, setShowSplash] = useState(true);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
-  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
+  
+  // 🔥 Версия базы данных изменена на v13 для полной очистки!
+  const [customers, setCustomers] = useLocalStorage('amina_customers_v13', INITIAL_CUSTOMERS);
+  const [roles, setRoles] = useLocalStorage('amina_roles_v13', INITIAL_ROLES);
+  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v13', { qr: 0, link: 0 });
   
   // ВЕЧНЫЙ ВХОД ДЛЯ УСТРОЙСТВА
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 

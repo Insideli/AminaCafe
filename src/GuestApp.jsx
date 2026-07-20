@@ -263,11 +263,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     }
   };
 
-  const confirmTransfer = () => {
+    const confirmTransfer = () => {
     const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
     setOrders(prev => [newOrder, ...(prev || [])]);
     setPendingOrderId(newOrder.id);
-    setPaymentStatus('processing'); 
+    setPaymentStatus('processing');
+    // ================= ДОБАВЬ ЭТУ СТРОКУ =================
+    sendToPaloma(newOrder);
+    // ======================================================
   };
 
   const handleCashSelection = () => {
@@ -275,11 +278,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     setPaymentStatus('select_waiter');
   };
 
-  const confirmCashWithWaiter = (waiterPhone, waiterName) => {
+    const confirmCashWithWaiter = (waiterPhone, waiterName) => {
     const newOrder = createOrderObject('waiter_pending', waiterPhone, waiterName, 'cash');
     setOrders(prev => [newOrder, ...(prev || [])]);
     setPendingOrderId(newOrder.id);
     setPaymentStatus('processing');
+    // ================= ДОБАВЬ ЭТУ СТРОКУ =================
+    sendToPaloma(newOrder);
+    // ======================================================
   };
 
   const selectRandomWaiter = () => {

@@ -64,6 +64,18 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   // ИНТЕГРАЦИЯ PALOMA POS
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
+    /*
+    try {
+      await fetch('https://api.paloma365.com/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ТУТ_БУДЕТ_API_КЛЮЧ' },
+        body: JSON.stringify(orderData)
+      });
+      console.log('Печать на кухне запущена!');
+    } catch (e) {
+      console.error('Ошибка Paloma365:', e);
+    }
+    */
   };
 
   // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ
@@ -116,39 +128,35 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   }, []);
 
   // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — с ПРИНУДИТЕЛЬНОЙ ПРОВЕРКОЙ КАЖДЫЕ 2 СЕКУНДЫ
+  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — Ошибка брони не зависает, ловит удаление
   // ================================================================
   useEffect(() => {
-    const checkOrderStatus = () => {
-      if (pendingOrderId && paymentStatus === 'processing') {
-        const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
-        if (checkOrder) {
-          // ✅ Кассир подтвердил
-          if (checkOrder.status === 'new') { 
-            sendToPaloma(checkOrder);
-            if (checkOrder.orderType === 'booking_deposit') {
-               setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
-               setPaymentStatus('booking_success');
-            } else {
-               setPaymentStatus('success'); 
-            }
-            setPendingOrderId(null); 
-          } 
-          // ✅ Кассир отклонил
-          else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined') { 
-            setPaymentStatus('rejected'); 
-            setPendingOrderId(null); 
+    if (pendingOrderId && paymentStatus === 'processing') {
+      const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
+      
+      if (checkOrder) {
+        // ✅ Кассир подтвердил — статус 'new'
+        if (checkOrder.status === 'new') { 
+          sendToPaloma(checkOrder);
+          if (checkOrder.orderType === 'booking_deposit') {
+             setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
+             setPaymentStatus('booking_success');
+          } else {
+             setPaymentStatus('success'); 
           }
+          setPendingOrderId(null); 
+        } 
+        // ✅ Кассир отклонил — статус 'rejected'
+        else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined' || checkOrder.status === 'cancelled') { 
+          setPaymentStatus('rejected'); 
+          setPendingOrderId(null); 
         }
+      } else {
+        // ❌ Если заказ на бронь был УДАЛЕН кассиром из списка
+        setPaymentStatus('rejected');
+        setPendingOrderId(null);
       }
-    };
-
-    // Проверяем сразу
-    checkOrderStatus();
-
-    // И проверяем каждые 2 секунды (принудительно!)
-    const interval = setInterval(checkOrderStatus, 2000);
-    return () => clearInterval(interval);
+    }
   }, [orders, pendingOrderId, paymentStatus, currentUser.phone]);
 
   useEffect(() => {
@@ -689,6 +697,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
+            {/* ЗАГРУЗКА (ЕСЛИ ДЕНЬГИ ЕЩЕ ПРОВЕРЯЮТСЯ) */}
             {paymentStatus === 'processing' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
@@ -705,19 +714,20 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
+            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ (КАК ТЫ И ПРОСИЛ) */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
                 <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Деньги не поступили!</h2>
-                <p style={{color: '#6b7280', marginBottom: '10px', fontSize: '15px', lineHeight: '1.4'}}>
-                  Кассир не подтвердил ваш перевод. Проверьте статус платежа в приложении банка.
+                <p style={{color: '#111827', marginBottom: '10px', fontSize: '18px', fontWeight: 'bold', lineHeight: '1.4'}}>
+                  Попробуйте попытку!
                 </p>
                 <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '14px', lineHeight: '1.4', background: '#fef3c7', padding: '12px', borderRadius: '10px'}}>
-                  💡 Попробуйте повторить попытку. Если проблема повторяется — обратитесь в техподдержку (в Профиле).
+                  💡 Кассир не смог подтвердить ваш перевод. Проверьте статус платежа в приложении банка. Если проблема повторяется — обратитесь в техподдержку.
                 </p>
                 <div style={{display: 'flex', gap: '10px'}}>
-                  <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>Повторить попытку</button>
-                  <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); setActiveGuestTab('profile'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>💬 В поддержку</button>
+                  <button onClick={() => { setPaymentStatus('idle'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>Повторить попытку</button>
+                  <button onClick={() => { setPaymentStatus('idle'); setActiveGuestTab('profile'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>💬 В поддержку</button>
                 </div>
               </div>
             )}

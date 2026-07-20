@@ -14,7 +14,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
 
-  // ИНСТРУКЦИЯ И ОНБОРДИНГ
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState('all'); 
@@ -65,7 +64,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   // ИНТЕГРАЦИЯ PALOMA POS
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
-    // Как только будет API ключ, раскомментируем код ниже:
     /*
     try {
       await fetch('https://api.paloma365.com/v1/orders', {
@@ -114,7 +112,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal || showInfoModal;
 
-  // МЯГКИЙ ФИКС СКРОЛЛА (без зависаний)
   useEffect(() => {
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -131,12 +128,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   }, []);
 
   // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА ОЖИДАНИЯ КАССИРА И ОТКЛОНЕНИЯ ПЕРЕВОДА
+  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — Гость видит ошибку, когда кассир отклоняет
   // ================================================================
   useEffect(() => {
     if (pendingOrderId && paymentStatus === 'processing') {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (checkOrder) {
+        // ✅ Кассир подтвердил — статус 'new'
         if (checkOrder.status === 'new') { 
           sendToPaloma(checkOrder);
           if (checkOrder.orderType === 'booking_deposit') {
@@ -147,7 +145,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           }
           setPendingOrderId(null); 
         } 
-        // ✅ ИСПРАВЛЕНИЕ: перехватываем статус rejected (деньги не поступили)
+        // ✅ Кассир отклонил — статус 'rejected'
         else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined') { 
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 

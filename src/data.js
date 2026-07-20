@@ -358,14 +358,11 @@ export const STATION_MAP = {
 
 export const INITIAL_CUSTOMERS = { "77075375180": { phone: "77075375180", name: "Або Босс", bonuses: 500, totalSpent: 10000, sessionToken: null } };
 
+// ✅ ИСПРАВЛЕННЫЙ INITIAL_ROLES — удалены все повара, оставлены только нужные роли
 export const INITIAL_ROLES = { 
   "001002003": { role: "admin", name: "Директор Эльвира", password: "Админ Амина", onShift: true, schedule: "ПН-ПТ", isSenior: false, sessionToken: null }, 
   "02180": { role: "developer", name: "Разработчик (Ваце)", password: "005", onShift: true, schedule: "24/7", isSenior: true, sessionToken: null },
-  "002005008": { role: "chef", name: "Шеф Повар", password: "Шеф повар Амина", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null }, 
-  "004005006": { role: "cook", station: "hot", name: "Повар Восток", password: "Восток повар", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null },
-  "005004006": { role: "cook", station: "cold", name: "Повар Холодный", password: "Холодный повар", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null },
-  "005005007": { role: "cook", station: "bar", name: "Бармен", password: "БАРМЕН", onShift: true, schedule: "3/1", isSenior: false, sessionToken: null },
-  "007008009": { role: "cook", station: "mangal", name: "Шашлычник", password: "МАНГАЛ", onShift: true, schedule: "5/2", isSenior: false, sessionToken: null },
+  "002005008": { role: "chef", name: "Шеф Повар", password: "Шеф повар Амина", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null },
   "77772222222": { role: "waiter", name: "Официант Али (Старший)", password: "123", schedule: "2/2", onShift: true, kaspi: "77072223344", isSenior: true, sessionToken: null },
   "009009009": { role: "cashier", name: "Кассир Мадина", password: "КАССА", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null }
 };

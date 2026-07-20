@@ -62,7 +62,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
 
-  // ИНТЕГРАЦИЯ PALOMA POS (ЗАГЛУШКА ДЛЯ ВЛАДЕЛЬЦА)
+  // ИНТЕГРАЦИЯ PALOMA POS
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
     // Как только будет API ключ, раскомментируем код ниже:
@@ -130,7 +130,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
   }, []);
 
-  // ЛОГИКА ОЖИДАНИЯ КАССИРА И ОТКЛОНЕНИЯ ПЕРЕВОДА
+  // ================================================================
+  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА ОЖИДАНИЯ КАССИРА И ОТКЛОНЕНИЯ ПЕРЕВОДА
+  // ================================================================
   useEffect(() => {
     if (pendingOrderId && paymentStatus === 'processing') {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
@@ -145,8 +147,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           }
           setPendingOrderId(null); 
         } 
+        // ✅ ИСПРАВЛЕНИЕ: перехватываем статус rejected (деньги не поступили)
         else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined') { 
-          // ИСПРАВЛЕНИЕ: Мгновенный перехват статуса rejected (Деньги не поступили)
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 
         }
@@ -609,7 +611,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
             {paymentStatus === 'select_waiter' && (
               <>
                  <div style={{display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '15px'}}>
-                  {/* Кнопка "Назад" возвращает к выбору метода только если это не заказ в зале */}
                   {orderType !== 'in_hall' ? (
                      <button onClick={() => setPaymentStatus('select_method')} style={{background: '#f3f4f6', border: 'none', color: '#111827', width: '36px', height: '36px', borderRadius: '10px', fontSize: '16px', cursor: 'pointer'}}>←</button>
                   ) : (
@@ -710,13 +711,21 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ */}
+            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
-                <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Подтвердите попытку, деньги не поступили!</h2>
-                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '15px', lineHeight: '1.4'}}>Кассир не смог подтвердить ваш перевод. Пожалуйста, проверьте статус платежа в приложении банка.</p>
-                <button onClick={() => setPaymentStatus('idle')} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer'}}>Попробовать снова</button>
+                <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Деньги не поступили!</h2>
+                <p style={{color: '#6b7280', marginBottom: '10px', fontSize: '15px', lineHeight: '1.4'}}>
+                  Кассир не подтвердил ваш перевод. Проверьте статус платежа в приложении банка.
+                </p>
+                <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '14px', lineHeight: '1.4', background: '#fef3c7', padding: '12px', borderRadius: '10px'}}>
+                  💡 Попробуйте повторить попытку. Если проблема повторяется — обратитесь в техподдержку (в Профиле).
+                </p>
+                <div style={{display: 'flex', gap: '10px'}}>
+                  <button onClick={() => { setPaymentStatus('idle'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>Повторить попытку</button>
+                  <button onClick={() => { setPaymentStatus('idle'); setActiveGuestTab('profile'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>💬 В поддержку</button>
+                </div>
               </div>
             )}
 
@@ -775,7 +784,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           </div>
         </div>
         
-        {/* НОВАЯ КНОПКА ИНФОРМАЦИИ И ПЕРЕКЛЮЧАТЕЛЬ ЯЗЫКА */}
         <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
           <button onClick={() => setShowInfoModal(true)} style={{ background: '#fef3c7', border: '1px solid #f59e0b', padding: '8px 10px', borderRadius: '10px', color: '#b45309', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             ℹ️
@@ -923,7 +931,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                    <h3 style={{ margin: 0, color: '#111827', fontSize: '16px' }}>📍 {lang === 'ru' ? 'Куда доставить?' : 'Қайда жеткізу керек?'}</h3>
                    <button onClick={handleGetLocation} style={{background: '#e0f2fe', color: '#0369a1', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'}}>🗺️ {lang === 'ru' ? 'По геоданным' : 'Геодеректер бойынша'}</button>
                 </div>
-                <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе্থкартадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
+                <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе картадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
                 <input type="text" placeholder={lang === 'ru' ? "Комментарий курьеру" : "Курьерге пікір"} value={address.comment} onChange={e=>setAddress({...address, comment: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
               </div>

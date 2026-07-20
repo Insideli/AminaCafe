@@ -64,18 +64,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   // ИНТЕГРАЦИЯ PALOMA POS
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
-    /*
-    try {
-      await fetch('https://api.paloma365.com/v1/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ТУТ_БУДЕТ_API_КЛЮЧ' },
-        body: JSON.stringify(orderData)
-      });
-      console.log('Печать на кухне запущена!');
-    } catch (e) {
-      console.error('Ошибка Paloma365:', e);
-    }
-    */
   };
 
   // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ
@@ -128,7 +116,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   }, []);
 
   // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — Гость видит ошибку, когда кассир отклоняет
+  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — обрабатывает И ЗАКАЗЫ, И БРОНИ
   // ================================================================
   useEffect(() => {
     if (pendingOrderId && paymentStatus === 'processing') {
@@ -145,7 +133,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           }
           setPendingOrderId(null); 
         } 
-        // ✅ Кассир отклонил — статус 'rejected'
+        // ✅ Кассир отклонил — статус 'rejected' (работает и для заказов, и для броней!)
         else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined') { 
           setPaymentStatus('rejected'); 
           setPendingOrderId(null); 
@@ -692,7 +680,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </>
             )}
 
-            {/* ЗАГРУЗКА (ЕСЛИ ДЕНЬГИ ЕЩЕ ПРОВЕРЯЮТСЯ) */}
             {paymentStatus === 'processing' && (
               <div style={{textAlign: 'center', padding: '40px 0'}}>
                 <div style={{fontSize: '60px', animation: 'spinPulse 2s infinite linear'}}>⏳</div>
@@ -709,7 +696,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
@@ -721,8 +707,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   💡 Попробуйте повторить попытку. Если проблема повторяется — обратитесь в техподдержку (в Профиле).
                 </p>
                 <div style={{display: 'flex', gap: '10px'}}>
-                  <button onClick={() => { setPaymentStatus('idle'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>Повторить попытку</button>
-                  <button onClick={() => { setPaymentStatus('idle'); setActiveGuestTab('profile'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>💬 В поддержку</button>
+                  <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>Повторить попытку</button>
+                  <button onClick={() => { setPaymentStatus('idle'); setPreOrderTableId(null); setActiveGuestTab('profile'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>💬 В поддержку</button>
                 </div>
               </div>
             )}

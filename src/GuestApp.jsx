@@ -42,6 +42,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
 
+  // Новые состояния для отзывов из профиля
+  const [showReviewFromProfile, setShowReviewFromProfile] = useState(false);
+  const [profileReviewRating, setProfileReviewRating] = useState(0);
+  const [profileReviewText, setProfileReviewText] = useState('');
+
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
 
   const t = {
@@ -110,7 +115,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     );
   };
 
-  const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal || showInfoModal;
+  const isAnyModalOpen = paymentStatus !== 'idle' || showTimeModal || waiterCallTableId !== null || reviewOrder !== null || showIOSInstallGuide || showSupportModal || showInfoModal || showReviewFromProfile;
 
   useEffect(() => {
     if (isAnyModalOpen) {
@@ -346,6 +351,18 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
      setReviewOrder(null); setReviewRating(0); setReviewText(''); alert('Спасибо за ваш отзыв!');
   };
 
+  // Функция для отправки отзыва из профиля
+  const submitProfileReview = () => {
+     if (profileReviewRating === 0) return alert('Выберите оценку в звездах!');
+     if (profileReviewRating <= 3 && profileReviewText.trim().length === 0) return alert('Пожалуйста, напишите причину низкой оценки, чтобы мы стали лучше.');
+     const newReview = { id: `REV-${Date.now()}`, type: 'cafe', targetId: 'cafe', targetName: 'Кафе Амина', rating: profileReviewRating, text: profileReviewText, author: currentUser.name, date: new Date().toLocaleDateString('ru-RU') };
+     setReviews(prev => [newReview, ...(prev || [])]);
+     setShowReviewFromProfile(false);
+     setProfileReviewRating(0);
+     setProfileReviewText('');
+     alert('Спасибо за ваш отзыв о кафе!');
+  };
+
   const displayedMenu = selectedCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === selectedCategory);
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
@@ -550,6 +567,39 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         </div>
       )}
 
+      {showReviewFromProfile && (
+        <div className="payment-overlay">
+          <div className="payment-modal" style={{textAlign: 'center', overflowY: 'auto'}}>
+             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
+               <h2 style={{margin: 0, color: '#111827'}}>Оцените наше кафе!</h2>
+               <button onClick={() => { setShowReviewFromProfile(false); setProfileReviewRating(0); setProfileReviewText(''); }} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer'}}>✕</button>
+             </div>
+             <p style={{color: '#6b7280', fontSize: '14px', marginBottom: '20px'}}>Ваше мнение поможет нам стать лучше!</p>
+             
+             <div style={{display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '20px'}}>
+               {[1,2,3,4,5].map(star => (
+                 <button key={star} onClick={() => setProfileReviewRating(star)} className={`star-btn ${profileReviewRating >= star ? 'active' : ''}`}>★</button>
+               ))}
+             </div>
+
+             {profileReviewRating > 0 && profileReviewRating <= 3 && (
+               <div style={{marginBottom: '20px', textAlign: 'left'}}>
+                 <p style={{margin: '0 0 5px 0', fontSize: '12px', color: '#dc2626', fontWeight: 'bold'}}>* Обязательно укажите причину низкой оценки</p>
+                 <textarea value={profileReviewText} onChange={e=>setProfileReviewText(e.target.value)} placeholder="Что пошло не так? Ваш отзыв поможет нам стать лучше." style={{width: '100%', height: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #dc2626', resize: 'none', background: '#fef2f2', color: '#111827', fontFamily: 'inherit'}}></textarea>
+               </div>
+             )}
+             
+             {profileReviewRating > 3 && (
+               <div style={{marginBottom: '20px'}}>
+                 <textarea value={profileReviewText} onChange={e=>setProfileReviewText(e.target.value)} placeholder="Напишите комментарий (необязательно)" style={{width: '100%', height: '80px', padding: '12px', borderRadius: '12px', border: '1px solid #d1d5db', resize: 'none', background: '#f9fafb', color: '#111827', fontFamily: 'inherit'}}></textarea>
+               </div>
+             )}
+
+             <button onClick={submitProfileReview} style={{width: '100%', padding: '16px', background: '#111827', color: '#fff', border: 'none', borderRadius: '14px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer'}}>Отправить отзыв</button>
+          </div>
+        </div>
+      )}
+
       {waiterCallTableId && (
         <div className="payment-overlay" onClick={() => setWaiterCallTableId(null)}>
           <div className="payment-modal" onClick={e => e.stopPropagation()}>
@@ -747,10 +797,15 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ */}
+            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ С КРАСИВОЙ ИКОНКОЙ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
-                <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
+                <div style={{fontSize: '80px', marginBottom: '10px', color: '#dc2626'}}>
+                  <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="40" cy="40" r="38" stroke="#dc2626" strokeWidth="4"/>
+                    <path d="M24 24L56 56M56 24L24 56" stroke="#dc2626" strokeWidth="6" strokeLinecap="round"/>
+                  </svg>
+                </div>
                 <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Деньги не поступили!</h2>
                 <p style={{color: '#111827', marginBottom: '10px', fontSize: '18px', fontWeight: 'bold', lineHeight: '1.4'}}>
                   Попробуйте еще раз!
@@ -1023,12 +1078,20 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <p style={{ color: '#10b981', fontSize: '24px', fontWeight: '900', margin: 0 }}>Кэшбек: {availableBonuses} ₸</p>
                 </div>
 
-                <button onClick={handleInstallClick} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                {/* Кнопка выхода — теперь сверху! */}
+                <button onClick={logout} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', background: '#fff', color: '#ef4444', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer' }}>{lang === 'ru' ? 'Выйти из аккаунта' : 'Аккаунттан шығу'}</button>
+
+                <button onClick={handleInstallClick} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                    📱 {lang === 'ru' ? 'Установить приложение' : 'Қосымшаны орнату'}
                 </button>
 
-                <button onClick={() => setShowSupportModal(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                <button onClick={() => setShowSupportModal(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: '#eff6ff', color: '#1d4ed8', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                    💬 {lang === 'ru' ? 'Написать разработчикам' : 'Қолдау қызметіне жазу'}
+                </button>
+
+                {/* 🔥 НОВЫЙ БЛОК: Оставить отзыв о кафе */}
+                <button onClick={() => setShowReviewFromProfile(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #f59e0b', background: '#fef3c7', color: '#b45309', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                   ⭐️ {lang === 'ru' ? 'Оставить отзыв о кафе' : 'Кафе туралы пікір қалдыру'}
                 </button>
 
                 <h3 style={{color: '#111827', margin: '0 0 15px 0'}}>{t.orderHistory}:</h3>
@@ -1051,7 +1114,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                     </div>
                   ))
                 }
-                <button onClick={logout} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', background: '#fff', color: '#ef4444', fontWeight: 'bold', marginTop: '20px', cursor: 'pointer' }}>{lang === 'ru' ? 'Выйти из аккаунта' : 'Аккаунттан шығу'}</button>
               </>
             )}
           </div>

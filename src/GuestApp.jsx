@@ -3,15 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
-  // 🔥 Версия базы данных изменена на v13 для полной очистки!
-  const [menu, setMenu] = useLocalStorage('amina_menu_v13', INITIAL_MENU);
-  const [tables, setTables] = useLocalStorage('amina_tables_v13', INITIAL_TABLES);
-  const [orders, setOrders] = useLocalStorage('amina_orders_v13', []);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v13', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v13', INITIAL_ROLES);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v13', []); 
+  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
+  const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
+  const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
+  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
+  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
+  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []); 
   
-  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v13', INITIAL_SUPPORT);
+  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
 
@@ -147,15 +146,15 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           }
           setPendingOrderId(null); 
         } 
-        // ✅ Кассир отклонил — статус 'rejected'
+        // ✅ Кассир отклонил — статус 'rejected' (не сбрасываем pendingOrderId!)
         else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined' || checkOrder.status === 'cancelled') { 
           setPaymentStatus('rejected'); 
-          setPendingOrderId(null); 
+          // ❗ НЕ СБРАСЫВАЕМ pendingOrderId — оставляем для повторной попытки!
         }
       } else {
         // ❌ Если заказ на бронь был УДАЛЕН кассиром из списка
         setPaymentStatus('rejected');
-        setPendingOrderId(null);
+        // ❗ Тоже не сбрасываем
       }
     }
   }, [orders, pendingOrderId, paymentStatus, currentUser.phone]);
@@ -196,7 +195,24 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     setShowTimeModal(false); 
   };
 
+  // ================================================================
+  // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОДТВЕРЖДЕНИЯ БРОНИ
+  // ================================================================
   const confirmBookingTransfer = () => {
+    // Если есть pendingOrderId и он в статусе rejected — обновляем существующий заказ
+    if (pendingOrderId && paymentStatus === 'rejected') {
+      const existingOrder = (orders || []).find(o => o.id === pendingOrderId);
+      if (existingOrder && existingOrder.orderType === 'booking_deposit') {
+        setOrders(prev => (prev || []).map(o => 
+          o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
+        ));
+        setPaymentStatus('processing');
+        // Кассиру снова придет уведомление
+        return;
+      }
+    }
+
+    // Создаем новый заказ на бронь
     const newOrder = {
        id: `BKG-${Math.floor(Math.random() * 10000)}`,
        phone: currentUser.phone, tableId: preOrderTableId, tableName: 'Залог за стол',
@@ -269,7 +285,23 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     }
   };
 
+  // ================================================================
+  // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОДТВЕРЖДЕНИЯ ПЕРЕВОДА (для заказов)
+  // ================================================================
   const confirmTransfer = () => {
+    // Если есть pendingOrderId и он в статусе rejected — обновляем существующий заказ
+    if (pendingOrderId && paymentStatus === 'rejected') {
+      const existingOrder = (orders || []).find(o => o.id === pendingOrderId);
+      if (existingOrder && existingOrder.orderType !== 'booking_deposit') {
+        setOrders(prev => (prev || []).map(o => 
+          o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
+        ));
+        setPaymentStatus('processing');
+        return;
+      }
+    }
+
+    // Если нет pendingOrderId — создаем новый заказ
     const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
     setOrders(prev => [newOrder, ...(prev || [])]);
     setPendingOrderId(newOrder.id);
@@ -715,20 +747,43 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ (КАК ТЫ И ПРОСИЛ) */}
+            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '70px', marginBottom: '15px'}}>❌</div>
                 <h2 style={{margin: '0 0 10px 0', fontSize: '24px', color: '#dc2626'}}>Деньги не поступили!</h2>
                 <p style={{color: '#111827', marginBottom: '10px', fontSize: '18px', fontWeight: 'bold', lineHeight: '1.4'}}>
-                  Попробуйте попытку!
+                  Попробуйте еще раз!
                 </p>
                 <p style={{color: '#6b7280', marginBottom: '30px', fontSize: '14px', lineHeight: '1.4', background: '#fef3c7', padding: '12px', borderRadius: '10px'}}>
                   💡 Кассир не смог подтвердить ваш перевод. Проверьте статус платежа в приложении банка. Если проблема повторяется — обратитесь в техподдержку.
                 </p>
                 <div style={{display: 'flex', gap: '10px'}}>
-                  <button onClick={() => { setPaymentStatus('idle'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>Повторить попытку</button>
-                  <button onClick={() => { setPaymentStatus('idle'); setActiveGuestTab('profile'); }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>💬 В поддержку</button>
+                  <button onClick={() => { 
+                    // Повторная попытка — обновляем статус существующего заказа
+                    if (pendingOrderId) {
+                      setOrders(prev => (prev || []).map(o => 
+                        o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
+                      ));
+                      setPaymentStatus('processing');
+                    } else {
+                      // Если ID потерян — создаем заново
+                      if (isPreOrderFlow) {
+                        confirmBookingTransfer();
+                      } else {
+                        confirmTransfer();
+                      }
+                    }
+                  }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: 'none', background: '#111827', color: '#fff', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>
+                    Повторить попытку
+                  </button>
+                  <button onClick={() => { 
+                    setPaymentStatus('idle'); 
+                    setActiveGuestTab('profile'); 
+                    setShowSupportModal(true); // Открыть поддержку
+                  }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>
+                    💬 В поддержку
+                  </button>
                 </div>
               </div>
             )}

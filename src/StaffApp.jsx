@@ -15,7 +15,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [activeSupportPhone, setActiveSupportPhone] = useState(null);
   const [supportAdminText, setSupportAdminText] = useState('');
 
-  // ОНБОРДИНГ И ИНСТРУКЦИИ ДЛЯ ПЕРСОНАЛА
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   const [adminTab, setAdminTab] = useState('stats'); 
@@ -40,7 +39,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showWaiterMenu, setShowWaiterMenu] = useState(false);
   const [waiterMenuCategory, setWaiterMenuCategory] = useState('all');
   
-  // СОСТОЯНИЕ ДЛЯ НОВОГО ОКНА ЧЕКА (ОФИЦИАНТ)
   const [viewReceiptOrder, setViewReceiptOrder] = useState(null);
 
   const [cashierTab, setCashierTab] = useState('orders'); 
@@ -50,7 +48,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
-  // ИНТЕГРАЦИЯ PALOMA POS (ЗАГЛУШКА ДЛЯ ВЛАДЕЛЬЦА)
+  // ИНТЕГРАЦИЯ PALOMA POS
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
     // Как только будет API ключ, раскомментируем код ниже:
@@ -68,7 +66,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     */
   };
 
-  // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ ПЕРСОНАЛА
   useEffect(() => {
     if (currentUser && currentUser.phone) {
       const hasSeen = localStorage.getItem(`onboarding_seen_${currentUser.phone}`);
@@ -79,7 +76,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     }
   }, [currentUser]);
 
-  // МЯГКИЙ ФИКС СКРОЛЛА
   useEffect(() => {
     const isAnyModalOpen = editStaffModal || showPosModal || showWaiterMenu || showInfoModal || !!viewReceiptOrder;
     if (isAnyModalOpen) {
@@ -169,7 +165,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     setOrders(prev => [newOrder, ...(prev || [])]); 
     setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy, bookedTime: t.bookedTime, servedBy: currentUser.phone, isCalling: false, calledWaiter: null } : t));
     
-    // Синхронизация с Paloma
     sendToPaloma(newOrder);
 
     setShowPosModal(false); setPosCart({}); alert('Заказ отправлен на кухню!');
@@ -194,7 +189,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     };
     setOrders(prev => [newOrder, ...(prev || [])]); 
     
-    // Синхронизация с Paloma
     sendToPaloma(newOrder);
 
     setCashierCart({}); alert('Заказ оплачен и отправлен на кухню!');
@@ -220,13 +214,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     return d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
   };
 
-  // ИСКЛЮЧАЕМ СТАТУС declined ИЗ ВАЛИДНЫХ (ЧТОБЫ ОН НЕ СЧИТАЛСЯ В ВЫРУЧКУ)
   const validOrders = (orders || []).filter(o => o.status !== 'rejected' && o.status !== 'declined' && o.status !== 'transfer_pending' && o.status !== 'waiter_pending');
   const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
   const kaspiRevenue = validOrders.filter(o => o.payMethod === 'kaspi').reduce((sum, o) => sum + o.total, 0);
   const cashRevenue = validOrders.filter(o => o.payMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
 
-  // ШАПКА ПЕРСОНАЛА С КНОПКОЙ ИНФОРМАЦИИ
   const HeaderControls = () => (
     <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
       <button onClick={() => setShowInfoModal(true)} style={{ background: '#fef3c7', border: '1px solid #f59e0b', padding: '6px 8px', borderRadius: '8px', color: '#b45309', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -239,7 +231,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     </div>
   );
 
-  // КОМПОНЕНТ ОБУЧЕНИЯ (ОНБОРДИНГА)
   const renderInfoModal = () => {
     if (!showInfoModal) return null;
     let roleTitle = '';
@@ -369,6 +360,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   };
 
+  // ================================================================
+  // 🔥 ИСПРАВЛЕННЫЙ БЛОК ОЖИДАНИЯ ПОДТВЕРЖДЕНИЯ (только transfer_pending)
+  // ================================================================
   const PendingTransfersBlock = () => {
     const pendingTransfers = (orders || []).filter(o => o.status === 'transfer_pending');
     if (pendingTransfers.length === 0) return null;
@@ -393,7 +387,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                            sendToPaloma(updatedOrder);
                        }
                    }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
-                   {/* ОТПРАВКА СТАТУСА rejected (ДЛЯ ГОСТЯ) */}
                    <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Деньги не поступили</button>
                 </div>
              </div>
@@ -564,7 +557,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
             <PendingTransfersBlock />
 
-            {/* Запросы счета от столов с подробной инфой */}
             {cashPendingTables.map(table => {
                const orderForTable = (orders || []).find(o => o.tableId === table.id && (o.status === 'cash_pending' || o.status === 'cooking' || o.status === 'new'));
                const guestPhone = table.bookedBy || orderForTable?.phone;
@@ -603,7 +595,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           </div>
         )}
 
-        {/* КАРТА ЗАЛОВ ДЛЯ КАССИРА */}
         {cashierTab === 'tables' && (
           <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
             <h2 style={{color: '#111827', margin: '0 0 15px 0'}}>🗺 Контроль залов (Касса)</h2>
@@ -806,7 +797,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         {renderWaiterMenuModal()}
         {renderInfoModal()}
 
-        {/* НОВЫЙ КОМПОНЕНТ МОДАЛЬНОГО ОКНА ДЛЯ ЧЕКА */}
         {viewReceiptOrder && (
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
             <div style={{ backgroundColor: '#fff', padding: '25px', borderRadius: '24px', width: '100%', maxWidth: '400px', position: 'relative', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
@@ -865,7 +855,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         </span>
                       </div>
                       
-                      {/* ЗАМЕНЕН СПИСОК БЛЮД НА СУММУ И КНОПКУ "ЧЕК" */}
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px'}}>
                         <span style={{fontWeight: 'bold', color: '#111827', fontSize: '15px'}}>{o.total} ₸</span>
                         <button onClick={() => setViewReceiptOrder(o)} style={{padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px'}}>🧾 Чек</button>
@@ -913,7 +902,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         <span style={{ fontSize: '12px', color: '#6b7280' }}>{t.status === 'free' ? 'Свободен' : 'Занят'}</span>
                         {t.status !== 'free' && t.servedBy && <p style={{fontSize: '11px', color: '#f59e0b', margin: '4px 0 0 0', fontWeight: 'bold'}}>{roles[t.servedBy]?.name || 'Официант'}</p>}
                         
-                        {/* ИНФОРМАЦИЯ О БРОНИ ДЛЯ ОФИЦИАНТА И УМНАЯ ПОСАДКА */}
                         {t.bookedBy && (
                           <div style={{background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', padding: '6px', marginTop: '8px'}}>
                              <p style={{margin: 0, fontWeight: 'bold', fontSize: '12px', color: '#b45309'}}>📅 Бронь на {t.bookedTime}</p>

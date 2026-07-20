@@ -116,30 +116,39 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   }, []);
 
   // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — обрабатывает И ЗАКАЗЫ, И БРОНИ
+  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — с ПРИНУДИТЕЛЬНОЙ ПРОВЕРКОЙ КАЖДЫЕ 2 СЕКУНДЫ
   // ================================================================
   useEffect(() => {
-    if (pendingOrderId && paymentStatus === 'processing') {
-      const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
-      if (checkOrder) {
-        // ✅ Кассир подтвердил — статус 'new'
-        if (checkOrder.status === 'new') { 
-          sendToPaloma(checkOrder);
-          if (checkOrder.orderType === 'booking_deposit') {
-             setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
-             setPaymentStatus('booking_success');
-          } else {
-             setPaymentStatus('success'); 
+    const checkOrderStatus = () => {
+      if (pendingOrderId && paymentStatus === 'processing') {
+        const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
+        if (checkOrder) {
+          // ✅ Кассир подтвердил
+          if (checkOrder.status === 'new') { 
+            sendToPaloma(checkOrder);
+            if (checkOrder.orderType === 'booking_deposit') {
+               setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
+               setPaymentStatus('booking_success');
+            } else {
+               setPaymentStatus('success'); 
+            }
+            setPendingOrderId(null); 
+          } 
+          // ✅ Кассир отклонил
+          else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined') { 
+            setPaymentStatus('rejected'); 
+            setPendingOrderId(null); 
           }
-          setPendingOrderId(null); 
-        } 
-        // ✅ Кассир отклонил — статус 'rejected' (работает и для заказов, и для броней!)
-        else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined') { 
-          setPaymentStatus('rejected'); 
-          setPendingOrderId(null); 
         }
       }
-    }
+    };
+
+    // Проверяем сразу
+    checkOrderStatus();
+
+    // И проверяем каждые 2 секунды (принудительно!)
+    const interval = setInterval(checkOrderStatus, 2000);
+    return () => clearInterval(interval);
   }, [orders, pendingOrderId, paymentStatus, currentUser.phone]);
 
   useEffect(() => {

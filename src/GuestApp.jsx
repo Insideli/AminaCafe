@@ -274,19 +274,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const cartItemsArray = Object.values(cart || {});
   const totalItemsCount = cartItemsArray.reduce((sum, item) => sum + item.quantity, 0);
   const baseSubtotal = cartItemsArray.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  // 🔥 ДОБАВЛЯЕМ 15% ТОЛЬКО ДЛЯ ОБЫЧНЫХ ЗАКАЗОВ, НЕ ДЛЯ БРОНИ
-  const serviceFee = isPreOrderFlow ? 0 : Math.round(baseSubtotal * 0.15);
-  const totalAmount = isPreOrderFlow ? (baseSubtotal === 0 ? 1000 : Math.round(baseSubtotal / 2)) : (baseSubtotal + serviceFee);
+  // 🔥 ДОБАВЛЯЕМ 15%
+  const serviceFee = Math.round(baseSubtotal * 0.15);
+  const totalAmount = isPreOrderFlow ? (baseSubtotal === 0 ? 1000 : Math.round((baseSubtotal + serviceFee) / 2)) : (baseSubtotal + serviceFee);
   const availableBonuses = customers[currentUser?.phone]?.bonuses || 0;
 
   const createOrderObject = (statusToSet, assignedWaiterPhone = null, assignedWaiterName = null, payMethod = 'kaspi') => {
     const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name} (x${i.quantity})`).join(', ') : "Обычный заказ";
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
-    // 🔥 ПРАВИЛЬНЫЙ РАСЧЕТ ПРОЦЕНТОВ ВНУТРИ ОБЪЕКТА
-    const currentSubtotal = cartItemsArray.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const currentServiceFee = isPreOrderFlow ? 0 : Math.round(currentSubtotal * 0.15);
-    const currentTotal = isPreOrderFlow ? (currentSubtotal === 0 ? 1000 : Math.round(currentSubtotal / 2)) : (currentSubtotal + currentServiceFee);
-
     return { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, 
       phone: currentUser.phone, 
@@ -294,9 +289,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       tableName: activeTableName, 
       cartItems: cartItemsArray, 
       itemsText: text, 
-      subtotal: currentSubtotal,
-      serviceFee: currentServiceFee,
-      total: currentTotal, 
+      subtotal: baseSubtotal,
+      serviceFee: serviceFee,
+      total: totalAmount, 
       tips: 0, 
       isPreOrder: isPreOrderFlow, 
       bookedTime: isPreOrderFlow ? bookingTime : null, 
@@ -1175,4 +1170,3 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     </div>
   );
 }
-[file content end]

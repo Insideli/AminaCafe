@@ -72,9 +72,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
     try {
+      // 👇 КОГДА ПОЛУЧИШЬ КЛЮЧ, ЗАМЕНИ ЭТУ СТРОКУ НА:
+      // 'Bearer ТВОЙ_API_КЛЮЧ_PALOMA'
       await fetch('https://api.paloma365.com/v1/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ВСТАВЬТЕ_СЮДА_ВАШ_API_КЛЮЧ_PALOMA' },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': 'Bearer ВСТАВЬТЕ_СЮДА_ВАШ_API_КЛЮЧ_PALOMA' 
+        },
         body: JSON.stringify(orderData)
       });
       console.log('Печать на кухне запущена!');
@@ -269,13 +274,37 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const cartItemsArray = Object.values(cart || {});
   const totalItemsCount = cartItemsArray.reduce((sum, item) => sum + item.quantity, 0);
   const baseSubtotal = cartItemsArray.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const totalAmount = isPreOrderFlow ? (baseSubtotal === 0 ? 1000 : Math.round(baseSubtotal / 2)) : baseSubtotal;
+  // 🔥 ДОБАВЛЯЕМ 15%
+  const serviceFee = Math.round(baseSubtotal * 0.15);
+  const totalAmount = isPreOrderFlow ? (baseSubtotal === 0 ? 1000 : Math.round((baseSubtotal + serviceFee) / 2)) : (baseSubtotal + serviceFee);
   const availableBonuses = customers[currentUser?.phone]?.bonuses || 0;
 
   const createOrderObject = (statusToSet, assignedWaiterPhone = null, assignedWaiterName = null, payMethod = 'kaspi') => {
     const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name} (x${i.quantity})`).join(', ') : "Обычный заказ";
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
-    return { id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: currentUser.phone, tableId: activeTable?.id || orderType, tableName: activeTableName, cartItems: cartItemsArray, itemsText: text, total: totalAmount, tips: 0, isPreOrder: isPreOrderFlow, bookedTime: isPreOrderFlow ? bookingTime : null, orderType, deliveryAddress: fullAddress, date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), status: statusToSet, waiterPhone: assignedWaiterPhone, waiterName: assignedWaiterName, isReviewed: false, reviewUnlockTime: null, payMethod };
+    return { 
+      id: `ORD-${Math.floor(Math.random() * 10000)}`, 
+      phone: currentUser.phone, 
+      tableId: activeTable?.id || orderType, 
+      tableName: activeTableName, 
+      cartItems: cartItemsArray, 
+      itemsText: text, 
+      subtotal: baseSubtotal,
+      serviceFee: serviceFee,
+      total: totalAmount, 
+      tips: 0, 
+      isPreOrder: isPreOrderFlow, 
+      bookedTime: isPreOrderFlow ? bookingTime : null, 
+      orderType, 
+      deliveryAddress: fullAddress, 
+      date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
+      status: statusToSet, 
+      waiterPhone: assignedWaiterPhone, 
+      waiterName: assignedWaiterName, 
+      isReviewed: false, 
+      reviewUnlockTime: null, 
+      payMethod 
+    };
   };
 
   const handlePayClick = () => {
@@ -1141,3 +1170,4 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     </div>
   );
 }
+[file content end]

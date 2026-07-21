@@ -141,7 +141,7 @@ function MainApp() {
       // 🔥 ОТПРАВЛЯЕМ ЗАПРОС НА СЕРВЕР ДЛЯ ГЕНЕРАЦИИ И ОТПРАВКИ СМС
       try {
         // ⚠️ ЗАМЕНИТЕ URL НА ВАШ БЭКЕНД!
-        const response = await fetch('https://ваш-сайт.vercel.app/api/send-sms', {
+        const response = await fetch('https://amina-cafe.vercel.app/api/send-sms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: tempPhone })
@@ -172,7 +172,7 @@ function MainApp() {
 
     try {
       // ⚠️ ЗАМЕНИТЕ URL НА ВАШ БЭКЕНД!
-      const response = await fetch('https://ваш-сайт.vercel.app/api/verify-code', {
+      const response = await fetch('https://amina-cafe.vercel.app/api/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: tempPhone, code: tempCode })

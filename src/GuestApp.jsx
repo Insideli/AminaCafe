@@ -66,21 +66,21 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
 
-  // ИНТЕГРАЦИЯ PALOMA POS
+  // ================================================================
+  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (РАСКОММЕНТИРОВАНО)
+  // ================================================================
   const sendToPaloma = async (orderData) => {
     console.log("Заказ успешно отправлен в Paloma365:", orderData);
-    /*
     try {
       await fetch('https://api.paloma365.com/v1/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ТУТ_БУДЕТ_API_КЛЮЧ' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ВСТАВЬТЕ_СЮДА_ВАШ_API_КЛЮЧ_PALOMA' },
         body: JSON.stringify(orderData)
       });
       console.log('Печать на кухне запущена!');
     } catch (e) {
       console.error('Ошибка Paloma365:', e);
     }
-    */
   };
 
   // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ

@@ -3,6 +3,24 @@ import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
 import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
+// 🔥 ИМПОРТ FIREBASE ДЛЯ СМС
+import { initializeApp } from "firebase/app";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+
+// 🔥 ТВОИ КЛЮЧИ FIREBASE (ТЕ ЖЕ, ЧТО В DATA.JS)
+const firebaseConfig = {
+  apiKey: "AIzaSyCayZ8gSclC24Y9ORgJuUOM6y-PXgp9wDE",
+  authDomain: "amina-c7864.firebaseapp.com",
+  projectId: "amina-c7864",
+  storageBucket: "amina-c7864.firebasestorage.app",
+  messagingSenderId: "216648759773",
+  appId: "1:216648759773:web:93584a988e605f86a91e34",
+  measurementId: "G-5X5RGCRY2H"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -99,7 +117,6 @@ function MainApp() {
         dbToken = (roles || {})[currentUser.phone]?.sessionToken;
       }
 
-      // Если база загрузилась, и токен не совпадает — выкидываем!
       if (dbToken && currentUser.sessionToken && dbToken !== currentUser.sessionToken) {
         alert(lang === 'ru' ? "⚠️ Ваш аккаунт открыт на другом устройстве! Сессия завершена." : "⚠️ Аккаунтыңыз басқа құрылғыда ашылды! Сессия аяқталды.");
         setCurrentUser({ role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null });
@@ -115,7 +132,7 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС ЧЕРЕЗ БЭКЕНД
+  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС ЧЕРЕЗ FIREBASE
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
@@ -138,64 +155,41 @@ function MainApp() {
       if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
       if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
 
-      // 🔥 ОТПРАВЛЯЕМ ЗАПРОС НА СЕРВЕР ДЛЯ ГЕНЕРАЦИИ И ОТПРАВКИ СМС
+      // 🔥 ОТПРАВЛЯЕМ ЧЕРЕЗ FIREBASE
       try {
-        // ⚠️ ЗАМЕНИТЕ URL НА ВАШ БЭКЕНД!
-        const response = await fetch('https://amina-cafe.vercel.app/api/send-sms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: tempPhone })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          // Сохраняем код для проверки (в реальном проекте код хранится на сервере)
-          // Для теста мы сохраняем его в localStorage, но лучше использовать бэкенд
-          localStorage.setItem(`sms_code_${tempPhone}`, data.code);
-          setAuthStep('sms');
-        } else {
-          alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.error || 'Белгісіз қате'}`);
+        if (!window.recaptchaVerifier) {
+          window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': (response) => {}
+          });
         }
+        
+        const appVerifier = window.recaptchaVerifier;
+        const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
+        window.confirmationResult = confirmationResult;
+        setAuthStep('sms');
       } catch (error) {
-        alert(lang === 'ru' ? `❌ Ошибка связи с сервером: ${error.message}` : `❌ Сервермен байланыс қатесі: ${error.message}`);
+        alert(lang === 'ru' ? "❌ Ошибка отправки СМС: " + error.message : "❌ СМС жіберу қатесі: " + error.message);
       }
     }
   };
   
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ПРОВЕРКИ СМС КОДА
+  // 🔥 НОВАЯ ФУНКЦИЯ ПРОВЕРКИ СМС КОДА ЧЕРЕЗ FIREBASE
   // ================================================================
   const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempCode) return;
 
     try {
-      // ⚠️ ЗАМЕНИТЕ URL НА ВАШ БЭКЕНД!
-      const response = await fetch('https://amina-cafe.vercel.app/api/verify-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: tempPhone, code: tempCode })
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
-      }
-
-      // ВАРИАНТ ДЛЯ ТЕСТИРОВАНИЯ (если бэкенд не готов)
-      // const savedCode = localStorage.getItem(`sms_code_${tempPhone}`);
-      // if (tempCode !== savedCode) {
-      //   return alert(lang === 'ru' ? "❌ Неверный код!" : "❌ Қате код!");
-      // }
-
+      const result = await window.confirmationResult.confirm(tempCode);
+      // Код верный!
     } catch (error) {
-      return alert(lang === 'ru' ? `❌ Ошибка проверки кода: ${error.message}` : `❌ Кодты тексеру қатесі: ${error.message}`);
+      return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
     }
 
     // Если код верный, продолжаем регистрацию/вход
-    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2); // Токен для гостя
+    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
 
     if (authMode === 'login_guest') { 
       const updatedCustomers = { ...customers, [tempPhone]: { ...customers[tempPhone], sessionToken: newToken } };
@@ -211,19 +205,17 @@ function MainApp() {
     e.preventDefault(); 
     if (!tempName.trim()) return alert(lang === 'ru' ? "Введите имя!" : "Атыңызды енгізіңіз!");
 
-    // 1. Проверка на язык (только кириллица и казахские буквы)
     const nameRegex = /^[А-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ\s\-]+$/i;
     if (!nameRegex.test(tempName)) {
       return alert(lang === 'ru' ? "❌ Имя должно содержать только русские или казахские буквы! Без цифр и спецсимволов." : "❌ Есімде тек орыс немесе қазақ әріптері болуы керек! Сандар мен белгілерсіз.");
     }
 
-    // 2. Проверка на уникальность (без учета регистра)
     const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim() && c.phone !== tempPhone);
     if (nameExists) {
       return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
     }
 
-    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2); // Токен для нового гостя
+    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
     setCustomers(prev => ({ ...(prev || {}), [tempPhone]: { phone: tempPhone, name: tempName.trim(), bonuses: 500, sessionToken: newToken } })); 
     setCurrentUser({ role: 'guest', phone: tempPhone, name: tempName.trim(), station: null, sessionToken: newToken }); 
     setShowAuthModal(false);
@@ -264,6 +256,10 @@ function MainApp() {
       {showAuthModal && (
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+            
+            {/* 🔥 ОБЯЗАТЕЛЬНО: НЕВИДИМЫЙ КОНТЕЙНЕР ДЛЯ FIREBASE */}
+            <div id="recaptcha-container"></div>
+
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>
               {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход' : 'Кіру') : authMode === 'register_guest' ? (lang === 'ru' ? 'Регистрация' : 'Тіркелу') : (lang === 'ru' ? 'Сотрудники' : 'Қызметкерлер')}

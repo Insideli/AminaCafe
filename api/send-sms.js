@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Разрешаем запросы с вашего сайта
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
 
@@ -17,23 +16,21 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Phone number is required' });
   }
 
-  // 🔥 ВСТАВЬТЕ СЮДА ВАШ API-КЛЮЧ ИЗ MOBIZON (kz_...)
-  const API_KEY = 'kze07ea62475a65bfa5e18f2391b5b81df1f60cd0c9cfd5d8720e5113d164c56d43d97';
+  // ✅ Ваш ключ со скриншота уже вставлен сюда!
+  const API_KEY = 'kze07ea62475a65bfa5e18f2391b5b81df1f60cd0c';
 
-  // Генерируем код
+  // Генерируем 4-значный код
   const code = Math.floor(1000 + Math.random() * 9000).toString();
 
-  // Правильный URL Mobizon
+  // Правильный URL для POST запроса
   const url = 'https://api.mobizon.kz/service/message/sendsms';
 
-  // Формируем тело запроса в правильном формате (x-www-form-urlencoded)
   const params = new URLSearchParams();
   params.append('apiKey', API_KEY);
   params.append('recipient', phone);
-  params.append('text', `Ваш код подтверждения: ${code}`);
+  params.append('text', `Ваш код подтверждения Amina: ${code}`);
 
   try {
-    // Отправляем POST запрос
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -44,12 +41,11 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    // Если код ответа 0, значит СМС отправлена успешно
     if (data.code === 0) {
+      // ✅ Возвращаем код на клиент
       return res.status(200).json({ success: true, code });
     } else {
-      // Если ошибка, возвращаем текст ошибки от Mobizon
-      return res.status(500).json({ success: false, error: data.message || 'Ошибка отправки СМС от провайдера' });
+      return res.status(500).json({ success: false, error: data.message || 'Ошибка отправки СМС' });
     }
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });

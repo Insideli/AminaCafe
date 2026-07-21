@@ -51,17 +51,19 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
-  // ИНТЕГРАЦИЯ PALOMA POS (ЗАКОММЕНТИРОВАНО, ОЖИДАЕТ API КЛЮЧА)
+  // ================================================================
+  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (РАСКОММЕНТИРОВАНО ДЛЯ STAFFAPP)
+  // ================================================================
   const sendToPaloma = async (orderData) => {
-    /*
     try {
       await fetch('https://api.paloma365.com/v1/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ВСТАВЬТЕ_API_КЛЮЧ' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ВСТАВЬТЕ_СЮДА_ВАШ_API_КЛЮЧ_PALOMA' },
         body: JSON.stringify(orderData)
       });
-    } catch (e) {}
-    */
+    } catch (e) {
+      console.error('Ошибка Paloma365:', e);
+    }
   };
 
   useEffect(() => {

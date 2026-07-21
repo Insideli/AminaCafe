@@ -56,8 +56,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   // ================================================================
   const sendToPaloma = async (orderData) => {
     try {
-      // 👇 КОГДА ПОЛУЧИШЬ КЛЮЧ, ЗАМЕНИ ЭТУ СТРОКУ НА:
-      // 'Bearer ТВОЙ_API_КЛЮЧ_PALOMA'
+      // 👇 ЗАМЕНИТЕ НА ВАШ КЛЮЧ
       await fetch('https://api.paloma365.com/v1/orders', {
         method: 'POST',
         headers: { 
@@ -163,7 +162,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const cartArray = Object.values(posCart || {}); if (cartArray.length === 0) return;
     const table = (tables || []).find(t => t.id === posTableId); 
     const subtotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
-    // 🔥 ДОБАВЛЯЕМ 15%
     const serviceFee = Math.round(subtotal * 0.15);
     const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
@@ -412,18 +410,21 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     // Фильтруем только активные заказы (не delivered)
     const activeOrders = tableOrders.filter(o => o.status !== 'delivered' && o.status !== 'rejected');
 
-    // Функция переключения isServed для конкретного блюда
-    const toggleItemServed = (orderId, itemIndex) => {
+    // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ БЛЮДА (через уникальный ID)
+    const toggleItemServed = (orderId, itemId) => {
       setOrders(prev => (prev || []).map(o => {
         if (o.id === orderId) {
-          const updatedItems = [...(o.cartItems || [])];
-          if (updatedItems[itemIndex]) {
-            updatedItems[itemIndex] = { ...updatedItems[itemIndex], isServed: !updatedItems[itemIndex].isServed };
-          }
+          const updatedItems = (o.cartItems || []).map(item => {
+            // Если ID совпадает — переключаем isServed
+            if (item.id === itemId) {
+              return { ...item, isServed: !item.isServed };
+            }
+            return item;
+          });
+
           // Проверяем, все ли блюда отмечены
           const allServed = updatedItems.every(item => item.isServed === true);
           if (allServed && updatedItems.length > 0) {
-            // Если все блюда поданы, закрываем заказ
             return { ...o, cartItems: updatedItems, status: 'delivered' };
           }
           return { ...o, cartItems: updatedItems };
@@ -432,11 +433,73 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       }));
     };
 
-    // Количество неподанных блюд для этого стола
+    // 🔥 ФУНКЦИЯ ЗАКРЫТИЯ СЧЁТА И ПЕЧАТИ ЧЕКА
+    const closeBillAndPrint = () => {
+      if (!table) return;
+
+      // 1. Считаем итоги
+      let subtotal = 0;
+      const allItems = [];
+      activeOrders.forEach(order => {
+        (order.cartItems || []).forEach(item => {
+          subtotal += (item.price * item.quantity);
+          allItems.push(item);
+        });
+      });
+      const serviceFee = Math.round(subtotal * 0.15);
+      const grandTotal = subtotal + serviceFee;
+
+      // 2. Формируем чек для Paloma
+      const receiptData = {
+        tableName: table.name,
+        waiterName: currentUser.name,
+        items: allItems,
+        subtotal: subtotal,
+        serviceFee: serviceFee,
+        total: grandTotal,
+        date: new Date().toLocaleString('ru-RU')
+      };
+
+      // 3. Отправляем на печать через Paloma API
+      sendToPaloma({
+        ...receiptData,
+        action: 'print_receipt',
+        printer: 'paloma'
+      });
+
+      // 4. Закрываем счёт в системе (все заказы в delivered)
+      setOrders(prev => (prev || []).map(o => {
+        if (o.tableId === tableId && o.status !== 'delivered' && o.status !== 'rejected') {
+          return { ...o, status: 'delivered' };
+        }
+        return o;
+      }));
+
+      // 5. Освобождаем стол
+      setTables(prev => (prev || []).map(t => t.id === tableId ? { ...t, status: 'free', servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : t));
+
+      // 6. Закрываем блокнот
+      setActiveOrdersList(null);
+    };
+
+    // Подсчёт итогов для отображения
+    let subtotal = 0;
+    activeOrders.forEach(order => {
+      (order.cartItems || []).forEach(item => {
+        subtotal += (item.price * item.quantity);
+      });
+    });
+    const serviceFee = Math.round(subtotal * 0.15);
+    const grandTotal = subtotal + serviceFee;
+
+    // Количество неподанных блюд
     const totalUnserved = tableOrders.reduce((sum, o) => {
       if (o.status === 'delivered' || o.status === 'rejected') return sum;
       return sum + (o.cartItems || []).filter(item => !item.isServed).length;
     }, 0);
+
+    // Проверка прав на закрытие счёта (только Старший или свой стол)
+    const canCloseBill = currentUser.isSenior || table?.servedBy === currentUser.phone;
 
     return (
       <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
@@ -464,10 +527,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {unservedItems.map((item, idx) => {
-                        // Находим реальный индекс в оригинальном массиве
-                        const originalIdx = (order.cartItems || []).findIndex(i => i === item);
                         return (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0', cursor: 'pointer' }} onClick={() => toggleItemServed(order.id, originalIdx)}>
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0', cursor: 'pointer' }} onClick={() => toggleItemServed(order.id, item.id)}>
                             <span style={{ fontSize: '20px', color: item.isServed ? '#10b981' : '#6b7280' }}>
                               {item.isServed ? '✅' : '□'}
                             </span>
@@ -482,8 +543,48 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               })
             )}
           </div>
-          
-          <button onClick={() => setActiveOrdersList(null)} style={{ marginTop: '15px', width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Закрыть блокнот</button>
+
+          {/* 🔥 БЛОК ИТОГОВ И КНОПКА ЗАКРЫТИЯ */}
+          <div style={{ marginTop: '15px', borderTop: '2px solid #f3f4f6', paddingTop: '15px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#4b5563' }}>
+              <span>Блюда:</span>
+              <span>{subtotal} ₸</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#4b5563' }}>
+              <span>Обслуживание (15%):</span>
+              <span>{serviceFee} ₸</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: '900', color: '#111827', marginTop: '8px' }}>
+              <span>💳 ИТОГО:</span>
+              <span>{grandTotal} ₸</span>
+            </div>
+
+            {canCloseBill && grandTotal > 0 && (
+              <button 
+                onClick={closeBillAndPrint}
+                style={{ 
+                  width: '100%', 
+                  padding: '14px', 
+                  marginTop: '15px', 
+                  background: '#10b981', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  fontWeight: 'bold', 
+                  fontSize: '16px', 
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 10px rgba(16,185,129,0.3)'
+                }}
+              >
+                🧾 Закрыть счёт и распечатать
+              </button>
+            )}
+            {!canCloseBill && grandTotal > 0 && (
+              <p style={{ textAlign: 'center', color: '#ef4444', fontSize: '13px', marginTop: '10px' }}>
+                ⚠️ Только Старший официант может закрыть этот счёт
+              </p>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1212,3 +1313,4 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
   return null;
 }
+[file content end]

@@ -52,12 +52,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
   // ================================================================
-  // 🔥 ИНТЕГРАЦИЯ PALOMA POS
+  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (ОСТАВЛЯЕМ ЗАГЛУШКУ, ТЫ ВСТАВИШЬ КЛЮЧ ПОТОМ)
   // ================================================================
   const sendToPaloma = async (orderData) => {
     try {
-      // 👇 КОГДА ПОЛУЧИШЬ КЛЮЧ, ЗАМЕНИ ЭТУ СТРОКУ НА:
-      // 'Bearer ТВОЙ_API_КЛЮЧ_PALOMA'
       await fetch('https://api.paloma365.com/v1/orders', {
         method: 'POST',
         headers: { 
@@ -69,6 +67,13 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     } catch (e) {
       console.error('Ошибка Paloma365:', e);
     }
+  };
+
+  // 🔥 ФУНКЦИЯ ДЛЯ ПЕЧАТИ ЧЕКА (ПОДГОТОВЛЕНА, НО ТРЕБУЕТ API КЛЮЧА ПРИНТЕРА)
+  const printReceipt = async (tableId) => {
+    // Здесь будет запрос на принтер Paloma
+    console.log(`🖨️ Отправлен запрос на печать чека для стола ${tableId}`);
+    // sendToPaloma({ type: 'print_receipt', tableId });
   };
 
   useEffect(() => {
@@ -163,7 +168,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const cartArray = Object.values(posCart || {}); if (cartArray.length === 0) return;
     const table = (tables || []).find(t => t.id === posTableId); 
     const subtotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
-    // 🔥 ДОБАВЛЯЕМ 15%
     const serviceFee = Math.round(subtotal * 0.15);
     const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
@@ -402,28 +406,29 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   };
 
   // ================================================================
-  // 🔥 НОВОЕ МОДАЛЬНОЕ ОКНО — БЛОКНОТ ОФИЦИАНТА
+  // 🔥 НОВОЕ МОДАЛЬНОЕ ОКНО — БЛОКНОТ ОФИЦИАНТА (С ГАЛОЧКОЙ И СЧЕТОМ)
   // ================================================================
   const renderWaiterNotebookModal = () => {
     if (!activeOrdersList) return null;
     const { tableId, orders: tableOrders } = activeOrdersList;
     const table = (tables || []).find(t => t.id === tableId);
     
-    // Фильтруем только активные заказы (не delivered)
+    // Фильтруем только активные заказы (не delivered и не rejected)
     const activeOrders = tableOrders.filter(o => o.status !== 'delivered' && o.status !== 'rejected');
 
-    // Функция переключения isServed для конкретного блюда
-    const toggleItemServed = (orderId, itemIndex) => {
+    // Функция переключения isServed по уникальному ID блюда
+    const toggleItemServed = (orderId, itemId) => {
       setOrders(prev => (prev || []).map(o => {
         if (o.id === orderId) {
-          const updatedItems = [...(o.cartItems || [])];
-          if (updatedItems[itemIndex]) {
-            updatedItems[itemIndex] = { ...updatedItems[itemIndex], isServed: !updatedItems[itemIndex].isServed };
-          }
+          const updatedItems = (o.cartItems || []).map(item => {
+            if (item.id === itemId) {
+              return { ...item, isServed: !item.isServed };
+            }
+            return item;
+          });
           // Проверяем, все ли блюда отмечены
           const allServed = updatedItems.every(item => item.isServed === true);
           if (allServed && updatedItems.length > 0) {
-            // Если все блюда поданы, закрываем заказ
             return { ...o, cartItems: updatedItems, status: 'delivered' };
           }
           return { ...o, cartItems: updatedItems };
@@ -432,11 +437,43 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       }));
     };
 
-    // Количество неподанных блюд для этого стола
-    const totalUnserved = tableOrders.reduce((sum, o) => {
-      if (o.status === 'delivered' || o.status === 'rejected') return sum;
-      return sum + (o.cartItems || []).filter(item => !item.isServed).length;
-    }, 0);
+    // Функция закрытия счета (для Старшего или своего стола)
+    const closeBill = () => {
+      if (!currentUser.isSenior && table?.servedBy !== currentUser.phone) {
+        alert("Вы не можете закрыть этот счёт! Это не ваш стол.");
+        return;
+      }
+      
+      // Закрываем все активные заказы для этого стола
+      const updatedOrders = orders.map(o => {
+        if (o.tableId === tableId && o.status !== 'delivered' && o.status !== 'rejected') {
+          return { ...o, status: 'delivered' };
+        }
+        return o;
+      });
+      setOrders(updatedOrders);
+      
+      // Отправляем на печать
+      printReceipt(tableId);
+      
+      // Освобождаем стол
+      setTables(prev => (prev || []).map(t => t.id === tableId ? { ...t, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : t));
+      
+      setActiveOrdersList(null);
+      alert("✅ Счёт закрыт! Чек отправлен на печать.");
+    };
+
+    // Подсчет итогов: сумма блюд + 15%
+    let subtotal = 0;
+    tableOrders.forEach(o => {
+      if (o.status !== 'delivered' && o.status !== 'rejected') {
+        (o.cartItems || []).forEach(item => {
+          subtotal += item.price * item.quantity;
+        });
+      }
+    });
+    const serviceFee = Math.round(subtotal * 0.15);
+    const total = subtotal + serviceFee;
 
     return (
       <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }}>
@@ -445,16 +482,19 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', paddingRight: '40px' }}>
             <h3 style={{ margin: 0, color: '#111827', fontSize: '18px' }}>📋 Блокнот: {table?.name || 'Стол'}</h3>
-            <span style={{ fontSize: '14px', color: '#ef4444', fontWeight: 'bold' }}>Осталось: {totalUnserved} блюд</span>
+            <span style={{ fontSize: '14px', color: '#ef4444', fontWeight: 'bold' }}>Осталось: {tableOrders.reduce((sum, o) => {
+              if (o.status === 'delivered' || o.status === 'rejected') return sum;
+              return sum + (o.cartItems || []).filter(item => !item.isServed).length;
+            }, 0)} блюд</span>
           </div>
           
-          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px', paddingBottom: '10px' }}>
             {activeOrders.length === 0 ? (
               <p style={{ textAlign: 'center', color: '#6b7280', padding: '20px 0' }}>Все заказы выполнены ✅</p>
             ) : (
               activeOrders.map(order => {
                 const unservedItems = (order.cartItems || []).filter(item => !item.isServed);
-                if (unservedItems.length === 0) return null; // Если всё подано, не показываем
+                if (unservedItems.length === 0) return null;
                 
                 return (
                   <div key={order.id} style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', borderLeft: '4px solid #3b82f6' }}>
@@ -463,27 +503,57 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                       <span style={{ fontSize: '12px', color: '#6b7280' }}>Заказ #{order.id.slice(-4)}</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {unservedItems.map((item, idx) => {
-                        // Находим реальный индекс в оригинальном массиве
-                        const originalIdx = (order.cartItems || []).findIndex(i => i === item);
-                        return (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0', cursor: 'pointer' }} onClick={() => toggleItemServed(order.id, originalIdx)}>
-                            <span style={{ fontSize: '20px', color: item.isServed ? '#10b981' : '#6b7280' }}>
-                              {item.isServed ? '✅' : '□'}
-                            </span>
-                            <span style={{ fontSize: '14px', color: '#111827', flex: 1 }}>{item.img} {item.name}</span>
-                            <span style={{ fontSize: '14px', color: '#ef4444', fontWeight: 'bold' }}>x{item.quantity}</span>
-                          </div>
-                        );
-                      })}
+                      {unservedItems.map((item) => (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0', cursor: 'pointer' }} onClick={() => toggleItemServed(order.id, item.id)}>
+                          <span style={{ fontSize: '20px', color: item.isServed ? '#10b981' : '#6b7280' }}>
+                            {item.isServed ? '✅' : '□'}
+                          </span>
+                          <span style={{ fontSize: '14px', color: '#111827', flex: 1 }}>{item.img} {item.name}</span>
+                          <span style={{ fontSize: '14px', color: '#ef4444', fontWeight: 'bold' }}>x{item.quantity}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
               })
             )}
           </div>
-          
-          <button onClick={() => setActiveOrdersList(null)} style={{ marginTop: '15px', width: '100%', padding: '12px', borderRadius: '12px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>Закрыть блокнот</button>
+
+          {/* 🔥 БЛОК ИТОГОВОГО СЧЕТА */}
+          <div style={{ borderTop: '2px solid #111827', paddingTop: '15px', marginTop: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', color: '#4b5563' }}>
+              <span>Блюда:</span>
+              <span>{subtotal} ₸</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', color: '#4b5563' }}>
+              <span>Обслуживание (15%):</span>
+              <span>{serviceFee} ₸</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '22px', fontWeight: '900', color: '#111827', marginTop: '10px' }}>
+              <span>💳 Общий счёт:</span>
+              <span>{total} ₸</span>
+            </div>
+            
+            {/* Кнопка закрытия счета */}
+            <button 
+              onClick={closeBill}
+              style={{ 
+                marginTop: '15px', 
+                width: '100%', 
+                padding: '14px', 
+                borderRadius: '12px', 
+                border: 'none', 
+                background: currentUser.isSenior || table?.servedBy === currentUser.phone ? '#dc2626' : '#9ca3af', 
+                color: '#fff', 
+                fontWeight: 'bold', 
+                fontSize: '16px', 
+                cursor: currentUser.isSenior || table?.servedBy === currentUser.phone ? 'pointer' : 'not-allowed' 
+              }}
+              disabled={!(currentUser.isSenior || table?.servedBy === currentUser.phone)}
+            >
+              {currentUser.isSenior || table?.servedBy === currentUser.phone ? '🧾 Закрыть счёт и распечатать' : 'Доступно только Старшему или официанту стола'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1212,4 +1282,3 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
   return null;
 }
-[file content end]

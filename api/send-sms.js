@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   // 🔥 ВСТАВЬТЕ СЮДА ВАШ API-КЛЮЧ ИЗ MOBIZON
-  const API_KEY = 'ВАШ_API_КЛЮЧ_ИЗ_MOBIZON';
+  const API_KEY = 'kze07ea62475a65bfa5e18f2391b5b81df1f60cd0c9cfd5d8720e5113d164c56d43d97';
 
   const code = Math.floor(1000 + Math.random() * 9000).toString();
 

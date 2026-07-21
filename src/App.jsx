@@ -34,11 +34,9 @@ function useDeviceStorage(key, initialValue) {
 
 function MainApp() {
   const [showSplash, setShowSplash] = useState(true);
-  
-  // 🔥 Версия базы данных изменена на v13 для полной очистки!
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v13', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v13', INITIAL_ROLES);
-  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v13', { qr: 0, link: 0 });
+  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
+  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
+  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
   
   // ВЕЧНЫЙ ВХОД ДЛЯ УСТРОЙСТВА
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
@@ -116,7 +114,10 @@ function MainApp() {
     else { val = val.replace(/[^\d+]/g, ''); if (!val.startsWith('+7')) { val = '+7' + val.replace(/^\+?7?/, ''); } if (val.length > 12) val = val.slice(0, 12); setTempPhone(val); }
   };
 
-  const handlePhoneSubmit = (e) => { 
+  // ================================================================
+  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС ЧЕРЕЗ БЭКЕНД
+  // ================================================================
+  const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempPhone) return; 
     
@@ -136,14 +137,64 @@ function MainApp() {
       if (tempPhone.length !== 12) return alert(lang === 'ru' ? "❌ Введите полный номер: +7XXXXXXXXXX" : "❌ Толық нөмірді енгізіңіз: +7XXXXXXXXXX");
       if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
       if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
-      setAuthStep('sms'); 
+
+      // 🔥 ОТПРАВЛЯЕМ ЗАПРОС НА СЕРВЕР ДЛЯ ГЕНЕРАЦИИ И ОТПРАВКИ СМС
+      try {
+        // ⚠️ ЗАМЕНИТЕ URL НА ВАШ БЭКЕНД!
+        const response = await fetch('https://ваш-сайт.vercel.app/api/send-sms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: tempPhone })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Сохраняем код для проверки (в реальном проекте код хранится на сервере)
+          // Для теста мы сохраняем его в localStorage, но лучше использовать бэкенд
+          localStorage.setItem(`sms_code_${tempPhone}`, data.code);
+          setAuthStep('sms');
+        } else {
+          alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.error || 'Белгісіз қате'}`);
+        }
+      } catch (error) {
+        alert(lang === 'ru' ? `❌ Ошибка связи с сервером: ${error.message}` : `❌ Сервермен байланыс қатесі: ${error.message}`);
+      }
     }
   };
   
-  const handleSmsSubmit = (e) => { 
+  // ================================================================
+  // 🔥 НОВАЯ ФУНКЦИЯ ПРОВЕРКИ СМС КОДА
+  // ================================================================
+  const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
-    if (tempCode !== '1234') return alert(lang === 'ru' ? "❌ Проверочный код: 1234" : "❌ Тексеру коды: 1234"); 
-    
+    if (!tempCode) return;
+
+    try {
+      // ⚠️ ЗАМЕНИТЕ URL НА ВАШ БЭКЕНД!
+      const response = await fetch('https://ваш-сайт.vercel.app/api/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: tempPhone, code: tempCode })
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
+      }
+
+      // ВАРИАНТ ДЛЯ ТЕСТИРОВАНИЯ (если бэкенд не готов)
+      // const savedCode = localStorage.getItem(`sms_code_${tempPhone}`);
+      // if (tempCode !== savedCode) {
+      //   return alert(lang === 'ru' ? "❌ Неверный код!" : "❌ Қате код!");
+      // }
+
+    } catch (error) {
+      return alert(lang === 'ru' ? `❌ Ошибка проверки кода: ${error.message}` : `❌ Кодты тексеру қатесі: ${error.message}`);
+    }
+
+    // Если код верный, продолжаем регистрацию/вход
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2); // Токен для гостя
 
     if (authMode === 'login_guest') { 
@@ -151,7 +202,9 @@ function MainApp() {
       setCustomers(updatedCustomers);
       setCurrentUser({ role: 'guest', phone: tempPhone, name: customers[tempPhone].name || 'Гость', station: null, sessionToken: newToken }); 
       setShowAuthModal(false); 
-    } else { setAuthStep('details'); } 
+    } else { 
+      setAuthStep('details'); 
+    } 
   };
   
   const handleDetailsSubmit = (e) => { 
@@ -226,7 +279,7 @@ function MainApp() {
             
             {authStep === 'sms' && (
               <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен на' : 'Код жіберілді'} {tempPhone}<br/>(Для теста введите: 1234)</p>
+                <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен на' : 'Код жіберілді'} {tempPhone}</p>
                 <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
                 <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
               </form>

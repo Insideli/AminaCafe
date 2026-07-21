@@ -52,13 +52,18 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
   // ================================================================
-  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (РАСКОММЕНТИРОВАНО ДЛЯ STAFFAPP)
+  // 🔥 ИНТЕГРАЦИЯ PALOMA POS
   // ================================================================
   const sendToPaloma = async (orderData) => {
     try {
+      // 👇 КОГДА ПОЛУЧИШЬ КЛЮЧ, ЗАМЕНИ ЭТУ СТРОКУ НА:
+      // 'Bearer ТВОЙ_API_КЛЮЧ_PALOMA'
       await fetch('https://api.paloma365.com/v1/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ВСТАВЬТЕ_СЮДА_ВАШ_API_КЛЮЧ_PALOMA' },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'Authorization': 'Bearer ВСТАВЬТЕ_СЮДА_ВАШ_API_КЛЮЧ_PALOMA' 
+        },
         body: JSON.stringify(orderData)
       });
     } catch (e) {
@@ -157,15 +162,20 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const submitPosOrder = () => {
     const cartArray = Object.values(posCart || {}); if (cartArray.length === 0) return;
     const table = (tables || []).find(t => t.id === posTableId); 
-    const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    const subtotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    // 🔥 ДОБАВЛЯЕМ 15%
+    const serviceFee = Math.round(subtotal * 0.15);
+    const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, 
       phone: 'waiter-' + currentUser.phone, 
       tableId: table?.id, 
       tableName: table?.name, 
-      cartItems: cartArray.map(item => ({ ...item, isServed: false })), // ✅ Добавляем флаг isServed
+      cartItems: cartArray.map(item => ({ ...item, isServed: false })), 
       itemsText: text, 
+      subtotal: subtotal,
+      serviceFee: serviceFee,
       total: total, 
       remaining: total, 
       tips: 0, 
@@ -190,16 +200,28 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const submitCashierOrder = (payMethod) => {
     const cartArray = Object.values(cashierCart || {}); 
     if (cartArray.length === 0) return;
-    const total = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    const subtotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    const serviceFee = Math.round(subtotal * 0.15);
+    const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'cashier-' + currentUser.phone, tableId: 'cashier', 
       tableName: cashierOrderType === 'takeaway' ? 'Навынос (Касса)' : 'Доставка (Касса)', 
       cartItems: cartArray.map(item => ({ ...item, isServed: false })), 
-      itemsText: text, total: total, remaining: total, tips: 0, 
-      isPreOrder: false, bookedTime: null, orderType: cashierOrderType, 
+      itemsText: text, 
+      subtotal: subtotal,
+      serviceFee: serviceFee,
+      total: total, 
+      remaining: total, 
+      tips: 0, 
+      isPreOrder: false, 
+      bookedTime: null, 
+      orderType: cashierOrderType, 
       date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
-      status: 'new', waiterPhone: currentUser.phone, waiterName: currentUser.name, payMethod: payMethod 
+      status: 'new', 
+      waiterPhone: currentUser.phone, 
+      waiterName: currentUser.name, 
+      payMethod: payMethod 
     };
     setOrders(prev => [newOrder, ...(prev || [])]); 
     sendToPaloma(newOrder);
@@ -1190,3 +1212,4 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
   return null;
 }
+[file content end]

@@ -132,7 +132,7 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС ЧЕРЕЗ FIREBASE
+  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС ЧЕРЕЗ FIREBASE (С ИСПРАВЛЕННОЙ reCAPTCHA)
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
@@ -155,14 +155,24 @@ function MainApp() {
       if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
       if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
 
-      // 🔥 ОТПРАВЛЯЕМ ЧЕРЕЗ FIREBASE
+      // 🔥 ИСПРАВЛЕННАЯ reCAPTCHA
       try {
-        if (!window.recaptchaVerifier) {
-          window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-            'size': 'invisible',
-            'callback': (response) => {}
-          });
+        // Если старый verifier существует — очищаем его
+        if (window.recaptchaVerifier) {
+          window.recaptchaVerifier.clear();
+          window.recaptchaVerifier = null;
         }
+        // Создаём новый verifier с обработчиком истечения
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'invisible',
+          'callback': (response) => {
+            // reCAPTCHA успешно пройдена
+          },
+          'expired-callback': () => {
+            // Если истекла — пересоздадим при следующей попытке
+            console.log('reCAPTCHA истекла');
+          }
+        });
         
         const appVerifier = window.recaptchaVerifier;
         const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
@@ -302,4 +312,4 @@ function MainApp() {
 
 export default function AppWrapper() {
   return <ErrorBoundary><MainApp /></ErrorBoundary>;
-}
+      }

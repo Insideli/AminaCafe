@@ -20,7 +20,6 @@ class ErrorBoundary extends Component {
   }
 }
 
-// Локальный хук для вечного входа (без Firebase)
 function useDeviceStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } 
@@ -53,10 +52,6 @@ function MainApp() {
   const [tempPassword, setTempPassword] = useState('');
 
   const [isSending, setIsSending] = useState(false);
-
-  // 🔥 ВСТАВЬ СЮДА ДАННЫЕ ОТ SMSAERO
-  const SMSAERO_API_KEY = 'MiYs7sVvMtxJCtWZuGBQbLRD7Cu'; // Твой ключ
-  const SMSAERO_EMAIL = 'abylaikhan.799@gmail.com'; // Email, который использовал при регистрации
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -115,24 +110,20 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ SMSAERO
+  // 🔥 ОТПРАВКА ЧЕРЕЗ ТВОЙ API НА VERCEL
   // ================================================================
   const sendSmsCode = async () => {
     setIsSending(true);
     const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
 
     try {
-      const response = await fetch(`https://gateway.smsaero.ru/v2/sms/send`, {
+      // Вызываем наш новый файл api/send-sms.js на Vercel
+      const response = await fetch('/api/send-sms', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${btoa(`${SMSAERO_EMAIL}:${SMSAERO_API_KEY}`)}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          number: tempPhone,
-          text: `Ваш код подтверждения Amina: ${generatedCode}`,
-          sign: 'SMS Aero', // Можно заменить на 'AMINA' после регистрации подписи
-          channel: 'SMS'
+          phone: tempPhone,
+          code: generatedCode
         })
       });
 
@@ -144,12 +135,12 @@ function MainApp() {
         return true;
       } else {
         setIsSending(false);
-        alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.message || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.message || 'Белгісіз қате'}`);
+        alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.message || data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.message || data.error || 'Белгісіз қате'}`);
         return false;
       }
     } catch (error) {
       setIsSending(false);
-      alert(lang === 'ru' ? `❌ Ошибка связи с SMSAERO: ${error.message}` : `❌ SMSAERO-мен байланыс қатесі: ${error.message}`);
+      alert(lang === 'ru' ? `❌ Ошибка связи с сервером: ${error.message}` : `❌ Сервермен байланыс қатесі: ${error.message}`);
       return false;
     }
   };
@@ -346,4 +337,4 @@ function MainApp() {
 
 export default function AppWrapper() {
   return <ErrorBoundary><MainApp /></ErrorBoundary>;
-}
+      }

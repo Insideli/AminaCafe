@@ -1,4 +1,6 @@
+// api/send-sms.js
 export default async function handler(req, res) {
+  // Разрешаем запросы с твоего сайта
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
 
@@ -10,43 +12,33 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { phone } = req.body;
+  const { phone, code } = req.body;
 
-  if (!phone) {
-    return res.status(400).json({ error: 'Phone number is required' });
+  if (!phone || !code) {
+    return res.status(400).json({ error: 'Phone and code are required' });
   }
 
-  // ✅ Ваш ключ со скриншота уже вставлен сюда!
-  const API_KEY = 'kze07ea62475a65bfa5e18f2391b5b81df1f60cd0c';
-
-  // Генерируем 4-значный код
-  const code = Math.floor(1000 + Math.random() * 9000).toString();
-
-  // Правильный URL для POST запроса
-  const url = 'https://api.mobizon.kz/service/message/sendsms';
-
-  const params = new URLSearchParams();
-  params.append('apiKey', API_KEY);
-  params.append('recipient', phone);
-  params.append('text', `Ваш код подтверждения Amina: ${code}`);
+  // Твои данные от SMSAERO
+  const SMSAERO_API_KEY = 'MiYs7sVvMtxJCtWZuGBQbLRD7Cu';
+  const SMSAERO_EMAIL = 'abylaikhan.799@gmail.com'; // Убедись, что этот email совпадает с тем, что в кабинете
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(`https://gateway.smsaero.ru/v2/sms/send`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${Buffer.from(`${SMSAERO_EMAIL}:${SMSAERO_API_KEY}`).toString('base64')}`
       },
-      body: params.toString()
+      body: JSON.stringify({
+        number: phone,
+        text: `Ваш код подтверждения Amina: ${code}`,
+        sign: 'SMS Aero',
+        channel: 'SMS'
+      })
     });
 
     const data = await response.json();
-
-    if (data.code === 0) {
-      // ✅ Возвращаем код на клиент
-      return res.status(200).json({ success: true, code });
-    } else {
-      return res.status(500).json({ success: false, error: data.message || 'Ошибка отправки СМС' });
-    }
+    return res.status(200).json(data);
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }

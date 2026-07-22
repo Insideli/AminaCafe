@@ -3,6 +3,28 @@ import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
 import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
+// 🔥 ИМПОРТ FIREBASE
+import { initializeApp } from "firebase/app";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+
+// 🔥 ТВОИ КЛЮЧИ FIREBASE
+const firebaseConfig = {
+  apiKey: "AIzaSyCayZ8gSclC24Y9ORgJuUOM6y-PXgp9wDE",
+  authDomain: "amina-c7864.firebaseapp.com",
+  projectId: "amina-c7864",
+  storageBucket: "amina-c7864.firebasestorage.app",
+  messagingSenderId: "216648759773",
+  appId: "1:216648759773:web:93584a988e605f86a91e34",
+  measurementId: "G-5X5RGCRY2H"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+// 🔥 ТЕСТОВЫЙ РЕЖИМ (ОБХОДИТ БЛОКИРОВКУ НОМЕРА)
+// КОГДА УБЕДИШЬСЯ, ЧТО ВСЁ РАБОТАЕТ - УДАЛИ ЭТУ СТРОКУ!
+auth.settings.appVerificationDisabledForTesting = true;
+
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -110,37 +132,27 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 ОТПРАВКА ЧЕРЕЗ ТВОЙ API НА VERCEL
+  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ FIREBASE
   // ================================================================
   const sendSmsCode = async () => {
     setIsSending(true);
-    const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
 
     try {
-      // Вызываем наш новый файл api/send-sms.js на Vercel
-      const response = await fetch('/api/send-sms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: tempPhone,
-          code: generatedCode
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        localStorage.setItem(`smsaero_code_${tempPhone}`, generatedCode);
-        setIsSending(false);
-        return true;
-      } else {
-        setIsSending(false);
-        alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.message || data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.message || data.error || 'Белгісіз қате'}`);
-        return false;
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'invisible',
+          'callback': () => {},
+          'expired-callback': () => {}
+        });
       }
+      const appVerifier = window.recaptchaVerifier;
+      const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
+      window.confirmationResult = confirmationResult;
+      setIsSending(false);
+      return true;
     } catch (error) {
       setIsSending(false);
-      alert(lang === 'ru' ? `❌ Ошибка связи с сервером: ${error.message}` : `❌ Сервермен байланыс қатесі: ${error.message}`);
+      alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${error.message}` : `❌ СМС жіберу қатесі: ${error.message}`);
       return false;
     }
   };
@@ -181,12 +193,11 @@ function MainApp() {
     e.preventDefault(); 
     if (!tempCode) return;
 
-    const savedCode = localStorage.getItem(`smsaero_code_${tempPhone}`);
-    if (tempCode !== savedCode) {
+    try {
+      await window.confirmationResult.confirm(tempCode);
+    } catch (error) {
       return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
     }
-
-    localStorage.removeItem(`smsaero_code_${tempPhone}`);
 
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
 
@@ -256,6 +267,8 @@ function MainApp() {
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             
+            <div id="recaptcha-container"></div>
+
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>
               {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход' : 'Кіру') : authMode === 'register_guest' ? (lang === 'ru' ? 'Регистрация' : 'Тіркелу') : (lang === 'ru' ? 'Сотрудники' : 'Қызметкерлер')}
@@ -337,4 +350,4 @@ function MainApp() {
 
 export default function AppWrapper() {
   return <ErrorBoundary><MainApp /></ErrorBoundary>;
-      }
+                                                                              }

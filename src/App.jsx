@@ -3,24 +3,6 @@ import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
 import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
-// 🔥 ИМПОРТ FIREBASE ДЛЯ СМС
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
-
-// 🔥 ТВОИ КЛЮЧИ FIREBASE (ТЕ ЖЕ, ЧТО В DATA.JS)
-const firebaseConfig = {
-  apiKey: "AIzaSyCayZ8gSclC24Y9ORgJuUOM6y-PXgp9wDE",
-  authDomain: "amina-c7864.firebaseapp.com",
-  projectId: "amina-c7864",
-  storageBucket: "amina-c7864.firebasestorage.app",
-  messagingSenderId: "216648759773",
-  appId: "1:216648759773:web:93584a988e605f86a91e34",
-  measurementId: "G-5X5RGCRY2H"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -74,6 +56,9 @@ function MainApp() {
 
   // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ (ЧТОБЫ НЕ БЫЛО ПОВТОРНЫХ НАЖАТИЙ)
   const [isSending, setIsSending] = useState(false);
+
+  // 🔥 ВСТАВЬ СЮДА ТОКЕН ОТ BOTFATHER (БЕЗ КАВЫЧЕК)
+  const TELEGRAM_BOT_TOKEN = '8941461236:AAHtwIRy189J7yvggHbBw_6AFv9ShniBsPc';
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -135,12 +120,12 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС (С ЗАГРУЗКОЙ И ЗАЩИТОЙ ОТ ПОВТОРНЫХ КЛИКОВ)
+  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ TELEGRAM (ВМЕСТО FIREBASE)
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
-    // Если уже идёт отправка — блокируем повторный клик
     if (isSending) return; 
+    if (!tempPhone) return; 
     
     if (authMode === 'login_staff') {
       const staffMember = (roles || {})[tempPhone];
@@ -162,53 +147,54 @@ function MainApp() {
       // 🔥 НАЧИНАЕМ ЗАГРУЗКУ
       setIsSending(true);
 
+      // Генерируем 6-значный код
+      const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Отправляем код в Telegram
       try {
-        // Если старый verifier существует — очищаем его
-        if (window.recaptchaVerifier) {
-          window.recaptchaVerifier.clear();
-          window.recaptchaVerifier = null;
-        }
-        // Создаём новый verifier с обработчиком истечения
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          'size': 'invisible',
-          'callback': (response) => {
-            // reCAPTCHA успешно пройдена
-          },
-          'expired-callback': () => {
-            console.log('reCAPTCHA истекла');
-          }
+        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: tempPhone, // Номер телефона (в формате +770...)
+            text: `Ваш код подтверждения Amina: ${generatedCode}`
+          })
         });
-        
-        const appVerifier = window.recaptchaVerifier;
-        const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
-        window.confirmationResult = confirmationResult;
-        
-        // ✅ ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПЕРЕХОДИМ К СМС
-        setIsSending(false);
-        setAuthStep('sms');
+
+        const data = await response.json();
+
+        if (data.ok) {
+          // Сохраняем код для проверки
+          localStorage.setItem(`telegram_code_${tempPhone}`, generatedCode);
+          setIsSending(false);
+          setAuthStep('sms'); // Переходим к экрану ввода кода
+        } else {
+          setIsSending(false);
+          alert(lang === 'ru' ? "❌ Ошибка отправки в Telegram. Проверьте, что у вас есть Telegram с этим номером." : "❌ Telegram-ға жіберу қатесі. Осы нөмірмен Telegram-ның бар екенін тексеріңіз.");
+        }
       } catch (error) {
-        // ❌ ОШИБКА — ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПОКАЗЫВАЕМ АЛЕРТ
         setIsSending(false);
-        alert(lang === 'ru' ? "❌ Ошибка отправки СМС: " + error.message : "❌ СМС жіберу қатесі: " + error.message);
+        alert(lang === 'ru' ? "❌ Ошибка связи с Telegram: " + error.message : "❌ Telegram-мен байланыс қатесі: " + error.message);
       }
     }
   };
   
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ПРОВЕРКИ СМС КОДА ЧЕРЕЗ FIREBASE
+  // 🔥 ПРОВЕРКА КОДА ИЗ TELEGRAM
   // ================================================================
   const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempCode) return;
 
-    try {
-      const result = await window.confirmationResult.confirm(tempCode);
-      // Код верный!
-    } catch (error) {
+    // Проверяем сохраненный код
+    const savedCode = localStorage.getItem(`telegram_code_${tempPhone}`);
+    if (tempCode !== savedCode) {
       return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
     }
 
-    // Если код верный, продолжаем регистрацию/вход
+    // Если код верный, удаляем его из хранилища и продолжаем
+    localStorage.removeItem(`telegram_code_${tempPhone}`);
+
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
 
     if (authMode === 'login_guest') { 
@@ -278,6 +264,7 @@ function MainApp() {
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             
             {/* 🔥 ОБЯЗАТЕЛЬНО: НЕВИДИМЫЙ КОНТЕЙНЕР ДЛЯ FIREBASE */}
+            {/* reCAPTCHA больше не нужна, оставляем div пустым */}
             <div id="recaptcha-container"></div>
 
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
@@ -315,8 +302,8 @@ function MainApp() {
             
             {authStep === 'sms' && (
               <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен на' : 'Код жіберілді'} {tempPhone}</p>
-                <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
+                <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен в Telegram на' : 'Код Telegram-ға жіберілді'} {tempPhone}</p>
+                <input type="number" placeholder="Код из Telegram" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
                 <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
               </form>
             )}
@@ -342,4 +329,4 @@ function MainApp() {
 
 export default function AppWrapper() {
   return <ErrorBoundary><MainApp /></ErrorBoundary>;
-                      }
+}

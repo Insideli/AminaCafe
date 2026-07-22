@@ -54,11 +54,12 @@ function MainApp() {
   const [tempName, setTempName] = useState(''); 
   const [tempPassword, setTempPassword] = useState('');
 
-  // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ (ЧТОБЫ НЕ БЫЛО ПОВТОРНЫХ НАЖАТИЙ)
+  // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ
   const [isSending, setIsSending] = useState(false);
 
-  // 🔥 ВСТАВЬ СЮДА ТОКЕН ОТ BOTFATHER (БЕЗ КАВЫЧЕК)
-  const TELEGRAM_BOT_TOKEN = '8941461236:AAHtwIRy189J7yvggHbBw_6AFv9ShniBsPc';
+  // 🔥 ВСТАВЬ СЮДА ДАННЫЕ ОТ SMSC.KZ
+  const SMSC_LOGIN = 'eaakhmetov'; // Логин API (обычно твой номер телефона)
+  const SMSC_PASSWORD = '.u49PYd7vTsgU2M'; // Пароль API (тот, что при регистрации)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -80,7 +81,7 @@ function MainApp() {
     });
   }, []);
 
-  // ЖЕСТКАЯ БЛОКИРОВКА ФОНА И РЕЗИНКИ ПРИ ОТКРЫТИИ ОКНА АВТОРИЗАЦИИ
+  // ЖЕСТКАЯ БЛОКИРОВКА ФОНА И РЕЗИНКИ
   useEffect(() => {
     if (showAuthModal) {
       document.body.style.overflow = 'hidden';
@@ -95,7 +96,7 @@ function MainApp() {
     };
   }, [showAuthModal]);
 
-  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Теперь работает И ДЛЯ ГОСТЕЙ, И ДЛЯ ПЕРСОНАЛА!
+  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА
   useEffect(() => {
     if (isAuthenticated && currentUser.phone) {
       let dbToken = null;
@@ -120,7 +121,7 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ TELEGRAM (ВМЕСТО FIREBASE)
+  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ SMSC.KZ
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
@@ -147,53 +148,56 @@ function MainApp() {
       // 🔥 НАЧИНАЕМ ЗАГРУЗКУ
       setIsSending(true);
 
-      // Генерируем 6-значный код
-      const generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+      // Генерируем 4-значный код
+      const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-      // Отправляем код в Telegram
+      // Отправляем код через SMSC.KZ
       try {
-        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        const response = await fetch(`https://smsc.kz/sys/send.php`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: tempPhone, // Номер телефона (в формате +770...)
-            text: `Ваш код подтверждения Amina: ${generatedCode}`
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            login: SMSC_LOGIN,
+            psw: SMSC_PASSWORD,
+            phones: tempPhone,
+            mes: `Ваш код подтверждения Amina: ${generatedCode}`,
+            sender: 'AMINA', // Имя отправителя
+            charset: 'utf-8'
           })
         });
 
-        const data = await response.json();
+        const data = await response.text(); // SMSC возвращает текст, а не JSON
 
-        if (data.ok) {
-          // Сохраняем код для проверки
-          localStorage.setItem(`telegram_code_${tempPhone}`, generatedCode);
+        // Если ответ начинается с "OK", значит СМС отправлена
+        if (data.startsWith('OK')) {
+          localStorage.setItem(`smsc_code_${tempPhone}`, generatedCode);
           setIsSending(false);
-          setAuthStep('sms'); // Переходим к экрану ввода кода
+          setAuthStep('sms'); 
         } else {
           setIsSending(false);
-          alert(lang === 'ru' ? "❌ Ошибка отправки в Telegram. Проверьте, что у вас есть Telegram с этим номером." : "❌ Telegram-ға жіберу қатесі. Осы нөмірмен Telegram-ның бар екенін тексеріңіз.");
+          alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data}` : `❌ СМС жіберу қатесі: ${data}`);
         }
       } catch (error) {
         setIsSending(false);
-        alert(lang === 'ru' ? "❌ Ошибка связи с Telegram: " + error.message : "❌ Telegram-мен байланыс қатесі: " + error.message);
+        alert(lang === 'ru' ? `❌ Ошибка связи с SMSC: ${error.message}` : `❌ SMSC-мен байланыс қатесі: ${error.message}`);
       }
     }
   };
   
   // ================================================================
-  // 🔥 ПРОВЕРКА КОДА ИЗ TELEGRAM
+  // 🔥 ПРОВЕРКА КОДА ИЗ SMSC.KZ
   // ================================================================
   const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempCode) return;
 
     // Проверяем сохраненный код
-    const savedCode = localStorage.getItem(`telegram_code_${tempPhone}`);
+    const savedCode = localStorage.getItem(`smsc_code_${tempPhone}`);
     if (tempCode !== savedCode) {
       return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
     }
 
-    // Если код верный, удаляем его из хранилища и продолжаем
-    localStorage.removeItem(`telegram_code_${tempPhone}`);
+    localStorage.removeItem(`smsc_code_${tempPhone}`);
 
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
 
@@ -263,10 +267,6 @@ function MainApp() {
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             
-            {/* 🔥 ОБЯЗАТЕЛЬНО: НЕВИДИМЫЙ КОНТЕЙНЕР ДЛЯ FIREBASE */}
-            {/* reCAPTCHA больше не нужна, оставляем div пустым */}
-            <div id="recaptcha-container"></div>
-
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>
               {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход' : 'Кіру') : authMode === 'register_guest' ? (lang === 'ru' ? 'Регистрация' : 'Тіркелу') : (lang === 'ru' ? 'Сотрудники' : 'Қызметкерлер')}
@@ -277,7 +277,6 @@ function MainApp() {
                 <div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Номер телефона' : 'Телефон нөмірі'}</label><input type="tel" placeholder={authMode === 'login_staff' ? "Логин" : "+7"} value={tempPhone} onChange={handlePhoneChange} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '18px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', fontWeight: 'bold', letterSpacing: '1px' }} /></div>
                 {authMode === 'login_staff' && (<div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Пароль' : 'Құпия сөз'}</label><input type="password" placeholder="***" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box' }} /></div>)}
 
-                {/* 🔥 КНОПКА ТЕПЕРЬ БЛОКИРУЕТСЯ И ПОКАЗЫВАЕТ ЗАГРУЗКУ */}
                 <button 
                   type="submit" 
                   disabled={isSending} 
@@ -302,8 +301,8 @@ function MainApp() {
             
             {authStep === 'sms' && (
               <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен в Telegram на' : 'Код Telegram-ға жіберілді'} {tempPhone}</p>
-                <input type="number" placeholder="Код из Telegram" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
+                <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен на' : 'Код жіберілді'} {tempPhone}</p>
+                <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
                 <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
               </form>
             )}

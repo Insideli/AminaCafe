@@ -121,7 +121,7 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ SMSC.KZ
+  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ SMSC.KZ (ИСПРАВЛЕННАЯ ССЫЛКА)
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
@@ -151,7 +151,7 @@ function MainApp() {
       // Генерируем 4-значный код
       const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-      // Отправляем код через SMSC.KZ
+      // Отправляем код через SMSC.KZ (Ссылка исправлена на HTTPS + fmt=3)
       try {
         const response = await fetch(`https://smsc.kz/sys/send.php`, {
           method: 'POST',
@@ -162,20 +162,22 @@ function MainApp() {
             phones: tempPhone,
             mes: `Ваш код подтверждения Amina: ${generatedCode}`,
             sender: 'AMINA', // Имя отправителя
-            charset: 'utf-8'
+            charset: 'utf-8',
+            fmt: 3 // Просим сервер отвечать JSON, а не текстом
           })
         });
 
-        const data = await response.text(); // SMSC возвращает текст, а не JSON
+        // Теперь мы ждём JSON
+        const data = await response.json();
 
-        // Если ответ начинается с "OK", значит СМС отправлена
-        if (data.startsWith('OK')) {
+        // SMSC возвращает { id: ..., cnt: ... } если успешно
+        if (data.id) {
           localStorage.setItem(`smsc_code_${tempPhone}`, generatedCode);
           setIsSending(false);
           setAuthStep('sms'); 
         } else {
           setIsSending(false);
-          alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data}` : `❌ СМС жіберу қатесі: ${data}`);
+          alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.error || 'Белгісіз қате'}`);
         }
       } catch (error) {
         setIsSending(false);

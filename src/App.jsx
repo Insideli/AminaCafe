@@ -121,7 +121,47 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ SMSC.KZ (ИСПРАВЛЕННАЯ ССЫЛКА)
+  // 🔥 ФУНКЦИЯ ОТПРАВКИ СМС (ВЫНЕСЕНА ОТДЕЛЬНО ДЛЯ ПОВТОРНОГО ИСПОЛЬЗОВАНИЯ)
+  // ================================================================
+  const sendSmsCode = async () => {
+    setIsSending(true);
+    const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+    try {
+      const response = await fetch(`https://smsc.kz/sys/send.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          login: SMSC_LOGIN,
+          psw: SMSC_PASSWORD,
+          phones: tempPhone,
+          mes: `Ваш код подтверждения Amina: ${generatedCode}`,
+          sender: 'AMINA',
+          charset: 'utf-8',
+          fmt: 3
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.id) {
+        localStorage.setItem(`smsc_code_${tempPhone}`, generatedCode);
+        setIsSending(false);
+        return true;
+      } else {
+        setIsSending(false);
+        alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.error || 'Белгісіз қате'}`);
+        return false;
+      }
+    } catch (error) {
+      setIsSending(false);
+      alert(lang === 'ru' ? `❌ Ошибка связи с SMSC: ${error.message}` : `❌ SMSC-мен байланыс қатесі: ${error.message}`);
+      return false;
+    }
+  };
+
+  // ================================================================
+  // 🔥 ОБРАБОТЧИК КНОПКИ "ДАЛЕЕ" (ПЕРВИЧНАЯ ОТПРАВКА)
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
@@ -145,55 +185,29 @@ function MainApp() {
       if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
       if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
 
-      // 🔥 НАЧИНАЕМ ЗАГРУЗКУ
-      setIsSending(true);
-
-      // Генерируем 4-значный код
-      const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
-
-      // Отправляем код через SMSC.KZ (Ссылка исправлена на HTTPS + fmt=3)
-      try {
-        const response = await fetch(`https://smsc.kz/sys/send.php`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            login: SMSC_LOGIN,
-            psw: SMSC_PASSWORD,
-            phones: tempPhone,
-            mes: `Ваш код подтверждения Amina: ${generatedCode}`,
-            sender: 'AMINA', // Имя отправителя
-            charset: 'utf-8',
-            fmt: 3 // Просим сервер отвечать JSON, а не текстом
-          })
-        });
-
-        // Теперь мы ждём JSON
-        const data = await response.json();
-
-        // SMSC возвращает { id: ..., cnt: ... } если успешно
-        if (data.id) {
-          localStorage.setItem(`smsc_code_${tempPhone}`, generatedCode);
-          setIsSending(false);
-          setAuthStep('sms'); 
-        } else {
-          setIsSending(false);
-          alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.error || 'Белгісіз қате'}`);
-        }
-      } catch (error) {
-        setIsSending(false);
-        alert(lang === 'ru' ? `❌ Ошибка связи с SMSC: ${error.message}` : `❌ SMSC-мен байланыс қатесі: ${error.message}`);
+      // Отправляем код
+      const success = await sendSmsCode();
+      if (success) {
+        setAuthStep('sms');
       }
     }
   };
-  
+
   // ================================================================
-  // 🔥 ПРОВЕРКА КОДА ИЗ SMSC.KZ
+  // 🔥 ОБРАБОТЧИК КНОПКИ "ОТПРАВИТЬ КОД ЕЩЕ РАЗ"
+  // ================================================================
+  const handleResendCode = async () => {
+    if (isSending) return;
+    await sendSmsCode();
+  };
+
+  // ================================================================
+  // 🔥 ПРОВЕРКА КОДА
   // ================================================================
   const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempCode) return;
 
-    // Проверяем сохраненный код
     const savedCode = localStorage.getItem(`smsc_code_${tempPhone}`);
     if (tempCode !== savedCode) {
       return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
@@ -212,7 +226,7 @@ function MainApp() {
       setAuthStep('details'); 
     } 
   };
-  
+
   const handleDetailsSubmit = (e) => { 
     e.preventDefault(); 
     if (!tempName.trim()) return alert(lang === 'ru' ? "Введите имя!" : "Атыңызды енгізіңіз!");
@@ -224,7 +238,7 @@ function MainApp() {
 
     const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim() && c.phone !== tempPhone);
     if (nameExists) {
-      return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
+      return alert(lang === 'ru' ? "❌ Это имя уже занято другим готем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
     }
 
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -302,11 +316,32 @@ function MainApp() {
             )}
             
             {authStep === 'sms' && (
-              <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'center' }}>
                 <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен на' : 'Код жіберілді'} {tempPhone}</p>
-                <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
-                <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
-              </form>
+                
+                <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
+                  <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
+                  <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginTop: '5px' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
+                </form>
+
+                {/* 🔥 КНОПКА ОТПРАВИТЬ ЕЩЁ РАЗ */}
+                <button 
+                  onClick={handleResendCode} 
+                  disabled={isSending}
+                  style={{
+                    marginTop: '15px',
+                    background: 'none',
+                    border: 'none',
+                    color: isSending ? '#9ca3af' : '#ea580c',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    cursor: isSending ? 'not-allowed' : 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  {isSending ? '⏳ Отправка...' : (lang === 'ru' ? 'Отправить код еще раз' : 'Кодты қайта жіберу')}
+                </button>
+              </div>
             )}
             
             {authStep === 'details' && (

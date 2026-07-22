@@ -72,6 +72,9 @@ function MainApp() {
   const [tempName, setTempName] = useState(''); 
   const [tempPassword, setTempPassword] = useState('');
 
+  // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ (ЧТОБЫ НЕ БЫЛО ПОВТОРНЫХ НАЖАТИЙ)
+  const [isSending, setIsSending] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = params.get('ref');
@@ -132,11 +135,12 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС ЧЕРЕЗ FIREBASE (С ИСПРАВЛЕННОЙ reCAPTCHA)
+  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС (С ЗАГРУЗКОЙ И ЗАЩИТОЙ ОТ ПОВТОРНЫХ КЛИКОВ)
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
-    if (!tempPhone) return; 
+    // Если уже идёт отправка — блокируем повторный клик
+    if (isSending) return; 
     
     if (authMode === 'login_staff') {
       const staffMember = (roles || {})[tempPhone];
@@ -155,7 +159,9 @@ function MainApp() {
       if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
       if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
 
-      // 🔥 ИСПРАВЛЕННАЯ reCAPTCHA
+      // 🔥 НАЧИНАЕМ ЗАГРУЗКУ
+      setIsSending(true);
+
       try {
         // Если старый verifier существует — очищаем его
         if (window.recaptchaVerifier) {
@@ -169,7 +175,6 @@ function MainApp() {
             // reCAPTCHA успешно пройдена
           },
           'expired-callback': () => {
-            // Если истекла — пересоздадим при следующей попытке
             console.log('reCAPTCHA истекла');
           }
         });
@@ -177,8 +182,13 @@ function MainApp() {
         const appVerifier = window.recaptchaVerifier;
         const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
         window.confirmationResult = confirmationResult;
+        
+        // ✅ ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПЕРЕХОДИМ К СМС
+        setIsSending(false);
         setAuthStep('sms');
       } catch (error) {
+        // ❌ ОШИБКА — ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПОКАЗЫВАЕМ АЛЕРТ
+        setIsSending(false);
         alert(lang === 'ru' ? "❌ Ошибка отправки СМС: " + error.message : "❌ СМС жіберу қатесі: " + error.message);
       }
     }
@@ -279,7 +289,27 @@ function MainApp() {
               <form onSubmit={handlePhoneSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Номер телефона' : 'Телефон нөмірі'}</label><input type="tel" placeholder={authMode === 'login_staff' ? "Логин" : "+7"} value={tempPhone} onChange={handlePhoneChange} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '18px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', fontWeight: 'bold', letterSpacing: '1px' }} /></div>
                 {authMode === 'login_staff' && (<div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Пароль' : 'Құпия сөз'}</label><input type="password" placeholder="***" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box' }} /></div>)}
-                <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: authMode === 'login_staff' ? '#111827' : '#ea580c', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginTop: '5px' }}>{lang === 'ru' ? 'Далее' : 'Жалғастыру'}</button>
+
+                {/* 🔥 КНОПКА ТЕПЕРЬ БЛОКИРУЕТСЯ И ПОКАЗЫВАЕТ ЗАГРУЗКУ */}
+                <button 
+                  type="submit" 
+                  disabled={isSending} 
+                  style={{ 
+                    width: '100%', 
+                    padding: '16px', 
+                    borderRadius: '14px', 
+                    border: 'none', 
+                    backgroundColor: isSending ? '#9ca3af' : (authMode === 'login_staff' ? '#111827' : '#ea580c'), 
+                    color: '#fff', 
+                    fontWeight: '900', 
+                    fontSize: '16px', 
+                    cursor: isSending ? 'not-allowed' : 'pointer', 
+                    marginTop: '5px',
+                    transition: '0.2s'
+                  }}
+                >
+                  {isSending ? '⏳ Отправка...' : (lang === 'ru' ? 'Далее' : 'Жалғастыру')}
+                </button>
               </form>
             )}
             
@@ -312,4 +342,4 @@ function MainApp() {
 
 export default function AppWrapper() {
   return <ErrorBoundary><MainApp /></ErrorBoundary>;
-      }
+                      }

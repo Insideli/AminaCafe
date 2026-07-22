@@ -3,24 +3,6 @@ import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
 import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
-// 🔥 ИМПОРТ FIREBASE ДЛЯ СМС
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
-
-// 🔥 ТВОИ КЛЮЧИ FIREBASE (ТЕ ЖЕ, ЧТО В DATA.JS)
-const firebaseConfig = {
-  apiKey: "AIzaSyCayZ8gSclC24Y9ORgJuUOM6y-PXgp9wDE",
-  authDomain: "amina-c7864.firebaseapp.com",
-  projectId: "amina-c7864",
-  storageBucket: "amina-c7864.firebasestorage.app",
-  messagingSenderId: "216648759773",
-  appId: "1:216648759773:web:93584a988e605f86a91e34",
-  measurementId: "G-5X5RGCRY2H"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -56,12 +38,10 @@ function MainApp() {
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
   
-  // ВЕЧНЫЙ ВХОД ДЛЯ УСТРОЙСТВА
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
   const [lang, setLang] = useDeviceStorage('amina_lang_device', 'ru');
   const isAuthenticated = !!currentUser.phone;
 
-  // PWA: Установка на главный экран
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -72,8 +52,11 @@ function MainApp() {
   const [tempName, setTempName] = useState(''); 
   const [tempPassword, setTempPassword] = useState('');
 
-  // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ (ЧТОБЫ НЕ БЫЛО ПОВТОРНЫХ НАЖАТИЙ)
   const [isSending, setIsSending] = useState(false);
+
+  // 🔥 ВСТАВЬ СЮДА ДАННЫЕ ОТ SMSAERO
+  const SMSAERO_API_KEY = 'MiYs7sVvMtxJCtWZuGBQbLRD7Cu'; // Твой ключ
+  const SMSAERO_EMAIL = 'abylaikhan.799@gmail.com'; // Email, который использовал при регистрации
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -87,7 +70,6 @@ function MainApp() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Слушатель для установки PWA на главный экран
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -95,7 +77,6 @@ function MainApp() {
     });
   }, []);
 
-  // ЖЕСТКАЯ БЛОКИРОВКА ФОНА И РЕЗИНКИ ПРИ ОТКРЫТИИ ОКНА АВТОРИЗАЦИИ
   useEffect(() => {
     if (showAuthModal) {
       document.body.style.overflow = 'hidden';
@@ -110,7 +91,6 @@ function MainApp() {
     };
   }, [showAuthModal]);
 
-  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Теперь работает И ДЛЯ ГОСТЕЙ, И ДЛЯ ПЕРСОНАЛА!
   useEffect(() => {
     if (isAuthenticated && currentUser.phone) {
       let dbToken = null;
@@ -135,12 +115,49 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС (С ЗАГРУЗКОЙ И ЗАЩИТОЙ ОТ ПОВТОРНЫХ КЛИКОВ)
+  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ SMSAERO
   // ================================================================
+  const sendSmsCode = async () => {
+    setIsSending(true);
+    const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+    try {
+      const response = await fetch(`https://gateway.smsaero.ru/v2/sms/send`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${btoa(`${SMSAERO_EMAIL}:${SMSAERO_API_KEY}`)}`
+        },
+        body: JSON.stringify({
+          number: tempPhone,
+          text: `Ваш код подтверждения Amina: ${generatedCode}`,
+          sign: 'SMS Aero', // Можно заменить на 'AMINA' после регистрации подписи
+          channel: 'SMS'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        localStorage.setItem(`smsaero_code_${tempPhone}`, generatedCode);
+        setIsSending(false);
+        return true;
+      } else {
+        setIsSending(false);
+        alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.message || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.message || 'Белгісіз қате'}`);
+        return false;
+      }
+    } catch (error) {
+      setIsSending(false);
+      alert(lang === 'ru' ? `❌ Ошибка связи с SMSAERO: ${error.message}` : `❌ SMSAERO-мен байланыс қатесі: ${error.message}`);
+      return false;
+    }
+  };
+
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
-    // Если уже идёт отправка — блокируем повторный клик
     if (isSending) return; 
+    if (!tempPhone) return; 
     
     if (authMode === 'login_staff') {
       const staffMember = (roles || {})[tempPhone];
@@ -159,56 +176,27 @@ function MainApp() {
       if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
       if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
 
-      // 🔥 НАЧИНАЕМ ЗАГРУЗКУ
-      setIsSending(true);
-
-      try {
-        // Если старый verifier существует — очищаем его
-        if (window.recaptchaVerifier) {
-          window.recaptchaVerifier.clear();
-          window.recaptchaVerifier = null;
-        }
-        // Создаём новый verifier с обработчиком истечения
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          'size': 'invisible',
-          'callback': (response) => {
-            // reCAPTCHA успешно пройдена
-          },
-          'expired-callback': () => {
-            console.log('reCAPTCHA истекла');
-          }
-        });
-        
-        const appVerifier = window.recaptchaVerifier;
-        const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
-        window.confirmationResult = confirmationResult;
-        
-        // ✅ ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПЕРЕХОДИМ К СМС
-        setIsSending(false);
-        setAuthStep('sms');
-      } catch (error) {
-        // ❌ ОШИБКА — ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПОКАЗЫВАЕМ АЛЕРТ
-        setIsSending(false);
-        alert(lang === 'ru' ? "❌ Ошибка отправки СМС: " + error.message : "❌ СМС жіберу қатесі: " + error.message);
-      }
+      const success = await sendSmsCode();
+      if (success) setAuthStep('sms');
     }
   };
-  
-  // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ПРОВЕРКИ СМС КОДА ЧЕРЕЗ FIREBASE
-  // ================================================================
+
+  const handleResendCode = async () => {
+    if (isSending) return;
+    await sendSmsCode();
+  };
+
   const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempCode) return;
 
-    try {
-      const result = await window.confirmationResult.confirm(tempCode);
-      // Код верный!
-    } catch (error) {
+    const savedCode = localStorage.getItem(`smsaero_code_${tempPhone}`);
+    if (tempCode !== savedCode) {
       return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
     }
 
-    // Если код верный, продолжаем регистрацию/вход
+    localStorage.removeItem(`smsaero_code_${tempPhone}`);
+
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
 
     if (authMode === 'login_guest') { 
@@ -220,7 +208,7 @@ function MainApp() {
       setAuthStep('details'); 
     } 
   };
-  
+
   const handleDetailsSubmit = (e) => { 
     e.preventDefault(); 
     if (!tempName.trim()) return alert(lang === 'ru' ? "Введите имя!" : "Атыңызды енгізіңіз!");
@@ -277,9 +265,6 @@ function MainApp() {
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             
-            {/* 🔥 ОБЯЗАТЕЛЬНО: НЕВИДИМЫЙ КОНТЕЙНЕР ДЛЯ FIREBASE */}
-            <div id="recaptcha-container"></div>
-
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>
               {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход' : 'Кіру') : authMode === 'register_guest' ? (lang === 'ru' ? 'Регистрация' : 'Тіркелу') : (lang === 'ru' ? 'Сотрудники' : 'Қызметкерлер')}
@@ -290,7 +275,6 @@ function MainApp() {
                 <div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Номер телефона' : 'Телефон нөмірі'}</label><input type="tel" placeholder={authMode === 'login_staff' ? "Логин" : "+7"} value={tempPhone} onChange={handlePhoneChange} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '18px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', fontWeight: 'bold', letterSpacing: '1px' }} /></div>
                 {authMode === 'login_staff' && (<div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Пароль' : 'Құпия сөз'}</label><input type="password" placeholder="***" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box' }} /></div>)}
 
-                {/* 🔥 КНОПКА ТЕПЕРЬ БЛОКИРУЕТСЯ И ПОКАЗЫВАЕТ ЗАГРУЗКУ */}
                 <button 
                   type="submit" 
                   disabled={isSending} 
@@ -314,11 +298,31 @@ function MainApp() {
             )}
             
             {authStep === 'sms' && (
-              <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'center' }}>
                 <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен на' : 'Код жіберілді'} {tempPhone}</p>
-                <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
-                <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
-              </form>
+                
+                <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '10px' }}>
+                  <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
+                  <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginTop: '5px' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
+                </form>
+
+                <button 
+                  onClick={handleResendCode} 
+                  disabled={isSending}
+                  style={{
+                    marginTop: '15px',
+                    background: 'none',
+                    border: 'none',
+                    color: isSending ? '#9ca3af' : '#ea580c',
+                    fontWeight: 'bold',
+                    fontSize: '14px',
+                    cursor: isSending ? 'not-allowed' : 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  {isSending ? '⏳ Отправка...' : (lang === 'ru' ? 'Отправить код еще раз' : 'Кодты қайта жіберу')}
+                </button>
+              </div>
             )}
             
             {authStep === 'details' && (

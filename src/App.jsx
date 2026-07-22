@@ -221,7 +221,7 @@ function MainApp() {
 
     const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim() && c.phone !== tempPhone);
     if (nameExists) {
-      return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
+      return alert(lang === 'ru' ? "❌ Это имя уже занято другим готем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
     }
 
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);

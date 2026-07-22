@@ -3,6 +3,27 @@ import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
 import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
+// 🔥 ИМПОРТ FIREBASE
+import { initializeApp } from "firebase/app";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+
+// 🔥 ТВОИ КЛЮЧИ FIREBASE
+const firebaseConfig = {
+  apiKey: "AIzaSyCayZ8gSclC24Y9ORgJuUOM6y-PXgp9wDE",
+  authDomain: "amina-c7864.firebaseapp.com",
+  projectId: "amina-c7864",
+  storageBucket: "amina-c7864.firebasestorage.app",
+  messagingSenderId: "216648759773",
+  appId: "1:216648759773:web:93584a988e605f86a91e34",
+  measurementId: "G-5X5RGCRY2H"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+// 🔥 ВКЛЮЧАЕМ ТЕСТОВЫЙ РЕЖИМ (УБРАТЬ ПЕРЕД ЗАПУСКОМ!)
+auth.settings.appVerificationDisabledForTesting = true;
+
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error) { return { hasError: true, error }; }
@@ -20,7 +41,6 @@ class ErrorBoundary extends Component {
   }
 }
 
-// Локальный хук для вечного входа (без Firebase)
 function useDeviceStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } 
@@ -38,12 +58,10 @@ function MainApp() {
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
   
-  // ВЕЧНЫЙ ВХОД ДЛЯ УСТРОЙСТВА
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
   const [lang, setLang] = useDeviceStorage('amina_lang_device', 'ru');
   const isAuthenticated = !!currentUser.phone;
 
-  // PWA: Установка на главный экран
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -54,12 +72,7 @@ function MainApp() {
   const [tempName, setTempName] = useState(''); 
   const [tempPassword, setTempPassword] = useState('');
 
-  // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ
   const [isSending, setIsSending] = useState(false);
-
-  // 🔥 ВСТАВЬ СЮДА ДАННЫЕ ОТ SMSC.KZ
-  const SMSC_LOGIN = 'eaakhmetov'; // Логин API (обычно твой номер телефона)
-  const SMSC_PASSWORD = '.u49PYd7vTsgU2M'; // Пароль API (тот, что при регистрации)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -73,7 +86,6 @@ function MainApp() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Слушатель для установки PWA на главный экран
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -81,7 +93,6 @@ function MainApp() {
     });
   }, []);
 
-  // ЖЕСТКАЯ БЛОКИРОВКА ФОНА И РЕЗИНКИ
   useEffect(() => {
     if (showAuthModal) {
       document.body.style.overflow = 'hidden';
@@ -96,7 +107,6 @@ function MainApp() {
     };
   }, [showAuthModal]);
 
-  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА
   useEffect(() => {
     if (isAuthenticated && currentUser.phone) {
       let dbToken = null;
@@ -121,48 +131,31 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 ФУНКЦИЯ ОТПРАВКИ СМС (ВЫНЕСЕНА ОТДЕЛЬНО ДЛЯ ПОВТОРНОГО ИСПОЛЬЗОВАНИЯ)
+  // 🔥 ОТПРАВКА КОДА ЧЕРЕЗ FIREBASE
   // ================================================================
   const sendSmsCode = async () => {
     setIsSending(true);
-    const generatedCode = Math.floor(1000 + Math.random() * 9000).toString();
 
     try {
-      const response = await fetch(`https://smsc.kz/sys/send.php`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          login: SMSC_LOGIN,
-          psw: SMSC_PASSWORD,
-          phones: tempPhone,
-          mes: `Ваш код подтверждения Amina: ${generatedCode}`,
-          sender: 'AMINA',
-          charset: 'utf-8',
-          fmt: 3
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.id) {
-        localStorage.setItem(`smsc_code_${tempPhone}`, generatedCode);
-        setIsSending(false);
-        return true;
-      } else {
-        setIsSending(false);
-        alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${data.error || 'Неизвестная ошибка'}` : `❌ СМС жіберу қатесі: ${data.error || 'Белгісіз қате'}`);
-        return false;
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'invisible',
+          'callback': () => {},
+          'expired-callback': () => {}
+        });
       }
+      const appVerifier = window.recaptchaVerifier;
+      const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
+      window.confirmationResult = confirmationResult;
+      setIsSending(false);
+      return true;
     } catch (error) {
       setIsSending(false);
-      alert(lang === 'ru' ? `❌ Ошибка связи с SMSC: ${error.message}` : `❌ SMSC-мен байланыс қатесі: ${error.message}`);
+      alert(lang === 'ru' ? `❌ Ошибка отправки СМС: ${error.message}` : `❌ СМС жіберу қатесі: ${error.message}`);
       return false;
     }
   };
 
-  // ================================================================
-  // 🔥 ОБРАБОТЧИК КНОПКИ "ДАЛЕЕ" (ПЕРВИЧНАЯ ОТПРАВКА)
-  // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
     if (isSending) return; 
@@ -185,35 +178,25 @@ function MainApp() {
       if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
       if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
 
-      // Отправляем код
       const success = await sendSmsCode();
-      if (success) {
-        setAuthStep('sms');
-      }
+      if (success) setAuthStep('sms');
     }
   };
 
-  // ================================================================
-  // 🔥 ОБРАБОТЧИК КНОПКИ "ОТПРАВИТЬ КОД ЕЩЕ РАЗ"
-  // ================================================================
   const handleResendCode = async () => {
     if (isSending) return;
     await sendSmsCode();
   };
 
-  // ================================================================
-  // 🔥 ПРОВЕРКА КОДА
-  // ================================================================
   const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempCode) return;
 
-    const savedCode = localStorage.getItem(`smsc_code_${tempPhone}`);
-    if (tempCode !== savedCode) {
+    try {
+      await window.confirmationResult.confirm(tempCode);
+    } catch (error) {
       return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
     }
-
-    localStorage.removeItem(`smsc_code_${tempPhone}`);
 
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
 
@@ -238,7 +221,7 @@ function MainApp() {
 
     const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim() && c.phone !== tempPhone);
     if (nameExists) {
-      return alert(lang === 'ru' ? "❌ Это имя уже занято другим готем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
+      return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
     }
 
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -283,6 +266,8 @@ function MainApp() {
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             
+            <div id="recaptcha-container"></div>
+
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>
               {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход' : 'Кіру') : authMode === 'register_guest' ? (lang === 'ru' ? 'Регистрация' : 'Тіркелу') : (lang === 'ru' ? 'Сотрудники' : 'Қызметкерлер')}
@@ -324,7 +309,6 @@ function MainApp() {
                   <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginTop: '5px' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
                 </form>
 
-                {/* 🔥 КНОПКА ОТПРАВИТЬ ЕЩЁ РАЗ */}
                 <button 
                   onClick={handleResendCode} 
                   disabled={isSending}

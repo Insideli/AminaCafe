@@ -78,7 +78,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
-          'Authorization': 'bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675' 
+          'Authorization': 'Bearer bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675' 
         },
         body: JSON.stringify(orderData)
       });

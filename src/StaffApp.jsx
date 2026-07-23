@@ -61,7 +61,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
-          'Authorization': 'Bearer ВСТАВЬТЕ_СЮДА_ВАШ_API_КЛЮЧ_PALOMA' 
+          'Authorization': 'bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675' 
         },
         body: JSON.stringify(orderData)
       });

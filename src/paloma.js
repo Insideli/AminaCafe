@@ -1,7 +1,7 @@
 // paloma.js — интеграция с Paloma365
 const PALOMA_HOST = 'https://api.paloma365.com';
 const AUTHKEY = 'bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675';
-const POINT_ID = 1; // Ваш point_id, полученный из /points
+const POINT_ID = 1; // Ваш point_id
 
 // Загрузить меню из Paloma
 export async function fetchPalomaMenu() {

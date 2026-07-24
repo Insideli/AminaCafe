@@ -1,7 +1,7 @@
 // paloma.js — интеграция с Paloma365
 const PALOMA_HOST = 'https://api.paloma365.com';
 const AUTHKEY = 'bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675';
-const POINT_ID = 1; // Ваш point_id
+const POINT_ID = 1;
 
 export async function fetchPalomaMenu() {
   const url = `${PALOMA_HOST}/company/api/index.php?class=Tester&method=menu&point_id=${POINT_ID}&authkey=${AUTHKEY}`;
@@ -30,7 +30,6 @@ export function buildPalomaOrder(internalOrder) {
     modifications: [],
     complex_items: [],
   }));
-
   return {
     order_id: internalOrder.id,
     date: new Date().toISOString().slice(0, 19).replace('T', ' '),

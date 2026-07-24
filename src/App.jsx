@@ -1,13 +1,13 @@
 import React, { useState, useEffect, Component } from 'react';
 import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
-import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage, syncMenuWithPaloma } from './data.js'; // 🔥 ПАЛОМА
+import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage, syncMenuWithPaloma, INITIAL_MENU } from './data.js';
 
 // 🔥 ИМПОРТ FIREBASE ДЛЯ СМС
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
 
-// 🔥 ТВОИ КЛЮЧИ FIREBASE (ТЕ ЖЕ, ЧТО В DATA.JS)
+// 🔥 ТВОИ КЛЮЧИ FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyCayZ8gSclC24Y9ORgJuUOM6y-PXgp9wDE",
   authDomain: "amina-c7864.firebaseapp.com",
@@ -38,7 +38,6 @@ class ErrorBoundary extends Component {
   }
 }
 
-// Локальный хук для вечного входа (без Firebase)
 function useDeviceStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } 
@@ -56,12 +55,10 @@ function MainApp() {
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
   
-  // ВЕЧНЫЙ ВХОД ДЛЯ УСТРОЙСТВА
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
   const [lang, setLang] = useDeviceStorage('amina_lang_device', 'ru');
   const isAuthenticated = !!currentUser.phone;
 
-  // PWA: Установка на главный экран
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -71,12 +68,10 @@ function MainApp() {
   const [tempCode, setTempCode] = useState('');
   const [tempName, setTempName] = useState(''); 
   const [tempPassword, setTempPassword] = useState('');
-
-  // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ (ЧТОБЫ НЕ БЫЛО ПОВТОРНЫХ НАЖАТИЙ)
   const [isSending, setIsSending] = useState(false);
 
-  // 🔥 ПАЛОМА: синхронизация меню при первом запуске
-  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU); // должен быть импортирован INITIAL_MENU
+  // 🔥 СИНХРОНИЗАЦИЯ С PALOMA (меню)
+  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
   useEffect(() => {
     const synced = localStorage.getItem('paloma_synced_v1');
     if (!synced) {
@@ -98,7 +93,6 @@ function MainApp() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Слушатель для установки PWA на главный экран
   useEffect(() => {
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -106,7 +100,6 @@ function MainApp() {
     });
   }, []);
 
-  // ЖЕСТКАЯ БЛОКИРОВКА ФОНА И РЕЗИНКИ ПРИ ОТКРЫТИИ ОКНА АВТОРИЗАЦИИ
   useEffect(() => {
     if (showAuthModal) {
       document.body.style.overflow = 'hidden';
@@ -121,7 +114,6 @@ function MainApp() {
     };
   }, [showAuthModal]);
 
-  // ИСПРАВЛЕННЫЙ ВЫШИБАЛА: Теперь работает И ДЛЯ ГОСТЕЙ, И ДЛЯ ПЕРСОНАЛА!
   useEffect(() => {
     if (isAuthenticated && currentUser.phone) {
       let dbToken = null;
@@ -146,13 +138,25 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ОТПРАВКИ СМС (С ЗАГРУЗКОЙ И ЗАЩИТОЙ ОТ ПОВТОРНЫХ КЛИКОВ)
+  // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ОТПРАВКИ СМС (ОЧИСТКА reCAPTCHA)
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
-    // Если уже идёт отправка — блокируем повторный клик
     if (isSending) return; 
-    
+
+    // ----- ВСЕГДА ОЧИЩАЕМ reCAPTCHA ПЕРВЫМ ДЕЛОМ -----
+    if (window.recaptchaVerifier) {
+      try {
+        window.recaptchaVerifier.clear();
+      } catch (err) {}
+      window.recaptchaVerifier = null;
+    }
+    // Очищаем содержимое контейнера
+    const container = document.getElementById('recaptcha-container');
+    if (container) {
+      container.innerHTML = '';
+    }
+
     if (authMode === 'login_staff') {
       const staffMember = (roles || {})[tempPhone];
       if (!staffMember) return alert(lang === 'ru' ? "❌ Неверный логин сотрудника!" : "❌ Қызметкердің логині қате!");
@@ -165,61 +169,55 @@ function MainApp() {
       
       setCurrentUser({ role: staffMember.role, phone: tempPhone, name: staffMember.name, station: staffMember.station || null, isSenior: staffMember.isSenior || false, sessionToken: newToken });
       setShowAuthModal(false);
-    } else {
-      if (tempPhone.length !== 12) return alert(lang === 'ru' ? "❌ Введите полный номер: +7XXXXXXXXXX" : "❌ Толық нөмірді енгізіңіз: +7XXXXXXXXXX");
-      if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
-      if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
+      return;
+    }
 
-      // 🔥 НАЧИНАЕМ ЗАГРУЗКУ
-      setIsSending(true);
+    // Проверки для гостей
+    if (tempPhone.length !== 12) return alert(lang === 'ru' ? "❌ Введите полный номер: +7XXXXXXXXXX" : "❌ Толық нөмірді енгізіңіз: +7XXXXXXXXXX");
+    if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
+    if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
 
-      try {
-        // Если старый verifier существует — очищаем его
-        if (window.recaptchaVerifier) {
-          window.recaptchaVerifier.clear();
-          window.recaptchaVerifier = null;
-        }
-        // Создаём новый verifier с обработчиком истечения
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          'size': 'invisible',
-          'callback': (response) => {
-            // reCAPTCHA успешно пройдена
-          },
-          'expired-callback': () => {
-            console.log('reCAPTCHA истекла');
-          }
-        });
-        
-        const appVerifier = window.recaptchaVerifier;
-        const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
-        window.confirmationResult = confirmationResult;
-        
-        // ✅ ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПЕРЕХОДИМ К СМС
-        setIsSending(false);
-        setAuthStep('sms');
-      } catch (error) {
-        // ❌ ОШИБКА — ОТКЛЮЧАЕМ ЗАГРУЗКУ И ПОКАЗЫВАЕМ АЛЕРТ
-        setIsSending(false);
-        alert(lang === 'ru' ? "❌ Ошибка отправки СМС: " + error.message : "❌ СМС жіберу қатесі: " + error.message);
+    setIsSending(true);
+
+    try {
+      // Создаём новый verifier (контейнер уже очищен)
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        'size': 'invisible',
+        'callback': () => {},
+        'expired-callback': () => console.log('reCAPTCHA истекла')
+      });
+      
+      const appVerifier = window.recaptchaVerifier;
+      const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
+      window.confirmationResult = confirmationResult;
+      
+      setIsSending(false);
+      setAuthStep('sms');
+    } catch (error) {
+      console.error('Ошибка СМС:', error);
+      setIsSending(false);
+      // Если ошибка, сбрасываем verifier
+      if (window.recaptchaVerifier) {
+        try { window.recaptchaVerifier.clear(); } catch (e) {}
+        window.recaptchaVerifier = null;
       }
+      alert(lang === 'ru' ? "❌ Ошибка отправки СМС: " + error.message : "❌ СМС жіберу қатесі: " + error.message);
     }
   };
   
   // ================================================================
-  // 🔥 НОВАЯ ФУНКЦИЯ ПРОВЕРКИ СМС КОДА ЧЕРЕЗ FIREBASE
+  // ПРОВЕРКА СМС КОДА
   // ================================================================
   const handleSmsSubmit = async (e) => { 
     e.preventDefault(); 
     if (!tempCode) return;
 
     try {
-      const result = await window.confirmationResult.confirm(tempCode);
-      // Код верный!
+      await window.confirmationResult.confirm(tempCode);
     } catch (error) {
       return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
     }
 
-    // Если код верный, продолжаем регистрацию/вход
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
 
     if (authMode === 'login_guest') { 
@@ -288,7 +286,6 @@ function MainApp() {
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
             
-            {/* 🔥 ОБЯЗАТЕЛЬНО: НЕВИДИМЫЙ КОНТЕЙНЕР ДЛЯ FIREBASE */}
             <div id="recaptcha-container"></div>
 
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
@@ -301,7 +298,6 @@ function MainApp() {
                 <div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Номер телефона' : 'Телефон нөмірі'}</label><input type="tel" placeholder={authMode === 'login_staff' ? "Логин" : "+7"} value={tempPhone} onChange={handlePhoneChange} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '18px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', fontWeight: 'bold', letterSpacing: '1px' }} /></div>
                 {authMode === 'login_staff' && (<div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Пароль' : 'Құпия сөз'}</label><input type="password" placeholder="***" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box' }} /></div>)}
 
-                {/* 🔥 КНОПКА ТЕПЕРЬ БЛОКИРУЕТСЯ И ПОКАЗЫВАЕТ ЗАГРУЗКУ */}
                 <button 
                   type="submit" 
                   disabled={isSending} 

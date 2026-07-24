@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Component } from 'react';
 import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
-import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage, syncMenuWithPaloma, INITIAL_MENU } from './data.js';
+import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
 // 🔥 ИМПОРТ FIREBASE ДЛЯ СМС
 import { initializeApp } from "firebase/app";
@@ -70,16 +70,7 @@ function MainApp() {
   const [tempPassword, setTempPassword] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  // 🔥 СИНХРОНИЗАЦИЯ С PALOMA (меню)
-  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
-  useEffect(() => {
-    const synced = localStorage.getItem('paloma_synced_v1');
-    if (!synced) {
-      syncMenuWithPaloma(menu, setMenu).then(() => {
-        localStorage.setItem('paloma_synced_v1', 'true');
-      });
-    }
-  }, []);
+  // Убираем синхронизацию с Paloma (она вызывает CORS-ошибку)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -138,20 +129,18 @@ function MainApp() {
   };
 
   // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ОТПРАВКИ СМС (ОЧИСТКА reCAPTCHA)
+  // 🔥 ФУНКЦИЯ ОТПРАВКИ СМС (ОЧИСТКА reCAPTCHA)
   // ================================================================
   const handlePhoneSubmit = async (e) => { 
     e.preventDefault(); 
     if (isSending) return; 
 
-    // ----- ВСЕГДА ОЧИЩАЕМ reCAPTCHA ПЕРВЫМ ДЕЛОМ -----
     if (window.recaptchaVerifier) {
       try {
         window.recaptchaVerifier.clear();
       } catch (err) {}
       window.recaptchaVerifier = null;
     }
-    // Очищаем содержимое контейнера
     const container = document.getElementById('recaptcha-container');
     if (container) {
       container.innerHTML = '';
@@ -172,7 +161,6 @@ function MainApp() {
       return;
     }
 
-    // Проверки для гостей
     if (tempPhone.length !== 12) return alert(lang === 'ru' ? "❌ Введите полный номер: +7XXXXXXXXXX" : "❌ Толық нөмірді енгізіңіз: +7XXXXXXXXXX");
     if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
     if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
@@ -180,7 +168,6 @@ function MainApp() {
     setIsSending(true);
 
     try {
-      // Создаём новый verifier (контейнер уже очищен)
       window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
         'size': 'invisible',
         'callback': () => {},
@@ -196,7 +183,6 @@ function MainApp() {
     } catch (error) {
       console.error('Ошибка СМС:', error);
       setIsSending(false);
-      // Если ошибка, сбрасываем verifier
       if (window.recaptchaVerifier) {
         try { window.recaptchaVerifier.clear(); } catch (e) {}
         window.recaptchaVerifier = null;

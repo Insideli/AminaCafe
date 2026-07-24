@@ -1,6 +1,7 @@
 // StaffApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, STATION_MAP, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
+import { sendOrderToPaloma, buildPalomaOrder } from './paloma.js'; // 🔥 ПАЛОМА
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
@@ -52,23 +53,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
   // ================================================================
-  // 🔥 ИНТЕГРАЦИЯ PALOMA POS
+  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (старая функция удалена)
   // ================================================================
-  const sendToPaloma = async (orderData) => {
-    try {
-      // 👇 ЗАМЕНИТЕ НА ВАШ КЛЮЧ
-      await fetch('https://api.paloma365.com/v1/orders', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': 'Bearer bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675' 
-        },
-        body: JSON.stringify(orderData)
-      });
-    } catch (e) {
-      console.error('Ошибка Paloma365:', e);
-    }
-  };
 
   useEffect(() => {
     if (currentUser && currentUser.phone) {
@@ -167,7 +153,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, 
-      phone: 'waiter-' + currentUser.phone, 
+      phone: 'waiter-' + currentUser.phone,
+      customerName: currentUser.name, // 🔥 ПАЛОМА
       tableId: table?.id, 
       tableName: table?.name, 
       cartItems: cartArray.map(item => ({ ...item, isServed: false })), 
@@ -188,7 +175,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     }; 
     setOrders(prev => [newOrder, ...(prev || [])]); 
     setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy, bookedTime: t.bookedTime, servedBy: currentUser.phone, isCalling: false, calledWaiter: null } : t));
-    sendToPaloma(newOrder);
+    // 🔥 ПАЛОМА: отправляем заказ
+    sendOrderToPaloma(buildPalomaOrder(newOrder)).catch(console.error);
     setShowPosModal(false); setPosCart({});
   };
 
@@ -203,7 +191,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { 
-      id: `ORD-${Math.floor(Math.random() * 10000)}`, phone: 'cashier-' + currentUser.phone, tableId: 'cashier', 
+      id: `ORD-${Math.floor(Math.random() * 10000)}`, 
+      phone: 'cashier-' + currentUser.phone,
+      customerName: currentUser.name, // 🔥 ПАЛОМА
+      tableId: 'cashier', 
       tableName: cashierOrderType === 'takeaway' ? 'Навынос (Касса)' : 'Доставка (Касса)', 
       cartItems: cartArray.map(item => ({ ...item, isServed: false })), 
       itemsText: text, 
@@ -222,7 +213,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       payMethod: payMethod 
     };
     setOrders(prev => [newOrder, ...(prev || [])]); 
-    sendToPaloma(newOrder);
+    sendOrderToPaloma(buildPalomaOrder(newOrder)).catch(console.error);
     setCashierCart({});
   };
 
@@ -331,7 +322,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                        if (o.orderType === 'booking_deposit') {
                            setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
                        } else {
-                           sendToPaloma(updatedOrder);
+                           // 🔥 ПАЛОМА: отправляем заказ
+                           sendOrderToPaloma(buildPalomaOrder({ ...o, customerName: guestInfo.name })).catch(console.error);
                        }
                    }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                    <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Деньги не поступили</button>
@@ -449,23 +441,20 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       const serviceFee = Math.round(subtotal * 0.15);
       const grandTotal = subtotal + serviceFee;
 
-      // 2. Формируем чек для Paloma
-      const receiptData = {
+      // 2. Формируем чек для Paloma (теперь используем buildPalomaOrder)
+      const receiptOrder = {
+        id: `REC-${Date.now()}`,
+        customerName: currentUser.name,
+        phone: currentUser.phone,
         tableName: table.name,
-        waiterName: currentUser.name,
-        items: allItems,
-        subtotal: subtotal,
-        serviceFee: serviceFee,
+        cartItems: allItems,
         total: grandTotal,
-        date: new Date().toLocaleString('ru-RU')
+        orderType: 'in_hall',
+        payMethod: 'cash',
+        deliveryAddress: '',
       };
-
-      // 3. Отправляем на печать через Paloma API
-      sendToPaloma({
-        ...receiptData,
-        action: 'print_receipt',
-        printer: 'paloma'
-      });
+      // Отправляем как заказ на печать (но это не полный чек, а просто данные)
+      sendOrderToPaloma(buildPalomaOrder(receiptOrder)).catch(console.error);
 
       // 4. Закрываем счёт в системе (все заказы в delivered)
       setOrders(prev => (prev || []).map(o => {
@@ -709,12 +698,18 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                       <button onClick={() => { 
                          const updatedOrder = {...orderForTable, status: 'delivered', payMethod: 'kaspi'};
                          setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
-                         if(orderForTable) { changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); sendToPaloma(updatedOrder); } 
+                         if(orderForTable) { 
+                           changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); 
+                           sendOrderToPaloma(buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name })).catch(console.error);
+                         } 
                       }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
                       <button onClick={() => { 
                          const updatedOrder = {...orderForTable, status: 'delivered', payMethod: 'cash'};
                          setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
-                         if(orderForTable) { changeOrderStatus(orderForTable.id, 'delivered', 'cash'); sendToPaloma(updatedOrder); }
+                         if(orderForTable) { 
+                           changeOrderStatus(orderForTable.id, 'delivered', 'cash'); 
+                           sendOrderToPaloma(buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name })).catch(console.error);
+                         }
                       }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
                     </div>
                  </div>
@@ -935,7 +930,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                      const updatedOrder = {...o, status: 'new', payMethod: 'cash'};
                      changeOrderStatus(o.id, 'new', 'cash'); 
                      setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, servedBy: currentUser.phone } : t)); 
-                     sendToPaloma(updatedOrder);
+                     sendOrderToPaloma(buildPalomaOrder({ ...updatedOrder, customerName: o.waiterName || currentUser.name })).catch(console.error);
                   }} style={{width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Оплату принял (Отправить на кухню)</button>
                </div>
             ))}
@@ -944,7 +939,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           {/* СТОЛЫ ПРОСЯТ СЧЕТ */}
           {(tables || []).filter(t => t.isCallingForBill && (t.servedBy === currentUser.phone || currentUser.isSenior)).map(table => {
              const ro = cashPending.find(o => o.tableId === table.id);
-             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) changeOrderStatus(ro.id, 'delivered'); }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
+             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) { changeOrderStatus(ro.id, 'delivered'); sendOrderToPaloma(buildPalomaOrder({ ...ro, customerName: 'Гость' })).catch(console.error); } }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
           })}
 
           {/* ГОТОВО ЗАБРАТЬ С КУХНИ */}

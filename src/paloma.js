@@ -3,7 +3,6 @@ const PALOMA_HOST = 'https://api.paloma365.com';
 const AUTHKEY = 'bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675';
 const POINT_ID = 1; // Ваш point_id
 
-// Загрузить меню из Paloma
 export async function fetchPalomaMenu() {
   const url = `${PALOMA_HOST}/company/api/index.php?class=Tester&method=menu&point_id=${POINT_ID}&authkey=${AUTHKEY}`;
   const response = await fetch(url);
@@ -11,7 +10,6 @@ export async function fetchPalomaMenu() {
   return response.json();
 }
 
-// Отправить заказ в Paloma
 export async function sendOrderToPaloma(orderPayload) {
   const url = `${PALOMA_HOST}/company/api/index.php?class=Tester&method=order&point_id=${POINT_ID}&authkey=${AUTHKEY}`;
   const response = await fetch(url, {
@@ -23,7 +21,6 @@ export async function sendOrderToPaloma(orderPayload) {
   return response.json();
 }
 
-// Преобразовать внутренний заказ в формат Paloma
 export function buildPalomaOrder(internalOrder) {
   const orderItems = (internalOrder.cartItems || []).map(item => ({
     object_id: item.paloma_id || 0,

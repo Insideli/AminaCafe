@@ -1,6 +1,7 @@
 // GuestApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
+import { sendOrderToPaloma, buildPalomaOrder } from './paloma.js'; // 🔥 ПАЛОМА
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
@@ -67,26 +68,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   };
 
   // ================================================================
-  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (РАСКОММЕНТИРОВАНО)
+  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (старая функция удалена, используем новую из paloma.js)
   // ================================================================
-  const sendToPaloma = async (orderData) => {
-    console.log("Заказ успешно отправлен в Paloma365:", orderData);
-    try {
-      // 👇 КОГДА ПОЛУЧИШЬ КЛЮЧ, ЗАМЕНИ ЭТУ СТРОКУ НА:
-      // 'Bearer ТВОЙ_API_КЛЮЧ_PALOMA'
-      await fetch('https://api.paloma365.com/v1/orders', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': 'Bearer bd83f267a42bcdcf05e1e9de4cfcc65ccafeamina9675' 
-        },
-        body: JSON.stringify(orderData)
-      });
-      console.log('Печать на кухне запущена!');
-    } catch (e) {
-      console.error('Ошибка Paloma365:', e);
-    }
-  };
 
   // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ
   useEffect(() => {
@@ -147,7 +130,10 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       if (checkOrder) {
         // ✅ Кассир подтвердил — статус 'new'
         if (checkOrder.status === 'new') { 
-          sendToPaloma(checkOrder);
+          // 🔥 ПАЛОМА: отправляем заказ
+          const palomaPayload = buildPalomaOrder({ ...checkOrder, customerName: currentUser.name });
+          sendOrderToPaloma(palomaPayload).catch(console.error);
+          // Остальная логика
           if (checkOrder.orderType === 'booking_deposit') {
              setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
              setPaymentStatus('booking_success');
@@ -225,11 +211,18 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     // Создаем новый заказ на бронь
     const newOrder = {
        id: `BKG-${Math.floor(Math.random() * 10000)}`,
-       phone: currentUser.phone, tableId: preOrderTableId, tableName: 'Залог за стол',
-       cartItems: [], itemsText: `Залог за бронь на ${bookingTime}`,
-       total: 1000, orderType: 'booking_deposit',
+       phone: currentUser.phone,
+       customerName: currentUser.name, // 🔥 ПАЛОМА
+       tableId: preOrderTableId,
+       tableName: 'Залог за стол',
+       cartItems: [],
+       itemsText: `Залог за бронь на ${bookingTime}`,
+       total: 1000,
+       orderType: 'booking_deposit',
        date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-       status: 'transfer_pending', payMethod: 'kaspi', bookedTime: bookingTime
+       status: 'transfer_pending',
+       payMethod: 'kaspi',
+       bookedTime: bookingTime
     };
     setOrders(prev => [newOrder, ...(prev || [])]);
     setPendingOrderId(newOrder.id);
@@ -284,7 +277,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
     return { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, 
-      phone: currentUser.phone, 
+      phone: currentUser.phone,
+      customerName: currentUser.name || 'Гость', // 🔥 ПАЛОМА
       tableId: activeTable?.id || orderType, 
       tableName: activeTableName, 
       cartItems: cartItemsArray, 

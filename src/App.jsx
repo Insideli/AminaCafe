@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Component } from 'react';
 import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
-import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
+import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage, syncMenuWithPaloma } from './data.js'; // 🔥 ПАЛОМА
 
 // 🔥 ИМПОРТ FIREBASE ДЛЯ СМС
 import { initializeApp } from "firebase/app";
@@ -74,6 +74,17 @@ function MainApp() {
 
   // 🔥 СОСТОЯНИЕ ЗАГРУЗКИ (ЧТОБЫ НЕ БЫЛО ПОВТОРНЫХ НАЖАТИЙ)
   const [isSending, setIsSending] = useState(false);
+
+  // 🔥 ПАЛОМА: синхронизация меню при первом запуске
+  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU); // должен быть импортирован INITIAL_MENU
+  useEffect(() => {
+    const synced = localStorage.getItem('paloma_synced_v1');
+    if (!synced) {
+      syncMenuWithPaloma(menu, setMenu).then(() => {
+        localStorage.setItem('paloma_synced_v1', 'true');
+      });
+    }
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -342,4 +353,4 @@ function MainApp() {
 
 export default function AppWrapper() {
   return <ErrorBoundary><MainApp /></ErrorBoundary>;
-    }
+}

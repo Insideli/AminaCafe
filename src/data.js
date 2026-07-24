@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
+import { fetchPalomaMenu } from './paloma.js';
 
+// ТВОИ КЛЮЧИ FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyCayZ8gSclC24Y9ORgJuUOM6y-PXgp9wDE",
   authDomain: "amina-c7864.firebaseapp.com",
@@ -7165,6 +7167,36 @@ export const INITIAL_ROLES = {
 };
 
 export const INITIAL_SUPPORT = [];
+export async function syncMenuWithPaloma(menu, setMenu) {
+  try {
+    const palomaData = await fetchPalomaMenu();
+    const palomaItems = [];
+    if (palomaData.item_groups) {
+      palomaData.item_groups.forEach(group => {
+        if (group.items) {
+          group.items.forEach(item => {
+            if (item.mark_deleted === 0 && item.i_useInMenu === 1) {
+              palomaItems.push(item);
+            }
+          });
+        }
+      });
+    }
+
+    const updatedMenu = menu.map(localItem => {
+      const found = palomaItems.find(p => 
+        p.name.trim().toLowerCase() === localItem.name.trim().toLowerCase()
+      );
+      return { ...localItem, paloma_id: found ? found.object_id : 0 };
+    });
+
+    setMenu(updatedMenu);
+    return updatedMenu;
+  } catch (error) {
+    console.error('Ошибка синхронизации меню с Paloma:', error);
+    return menu;
+  }
+}
 
 export function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(initialValue);

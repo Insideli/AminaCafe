@@ -40,9 +40,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showWaiterMenu, setShowWaiterMenu] = useState(false);
   const [waiterMenuCategory, setWaiterMenuCategory] = useState('all');
   
-  // ================================================================
-  // 🔥 НОВОЕ СОСТОЯНИЕ ДЛЯ БЛОКНОТА ОФИЦИАНТА
-  // ================================================================
   const [activeOrdersList, setActiveOrdersList] = useState(null); // { tableId, orders }
   
   const [cashierTab, setCashierTab] = useState('orders'); 
@@ -51,10 +48,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
-
-  // ================================================================
-  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (старая функция удалена)
-  // ================================================================
 
   useEffect(() => {
     if (currentUser && currentUser.phone) {
@@ -145,7 +138,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const removeFromPosCart = (id) => { setPosCart(prev => { const updated = { ...(prev || {}) }; if (!updated[id]) return prev; if (updated[id].quantity === 1) delete updated[id]; else updated[id].quantity -= 1; return updated; }); };
   
   const submitPosOrder = () => {
-    const cartArray = Object.values(posCart || {}); if (cartArray.length === 0) return;
+    const cartArray = Object.values(posCart || {}); 
+    if (cartArray.length === 0) return;
     const table = (tables || []).find(t => t.id === posTableId); 
     const subtotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
     const serviceFee = Math.round(subtotal * 0.15);
@@ -176,7 +170,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     setOrders(prev => [newOrder, ...(prev || [])]); 
     setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy, bookedTime: t.bookedTime, servedBy: currentUser.phone, isCalling: false, calledWaiter: null } : t));
     // 🔥 ПАЛОМА: отправляем заказ
-    sendOrderToPaloma(buildPalomaOrder(newOrder)).catch(console.error);
+    const palomaPayload = buildPalomaOrder(newOrder);
+    sendOrderToPaloma(palomaPayload)
+      .then(() => console.log('✅ Заказ официанта отправлен в Paloma'))
+      .catch(err => console.error('❌ Ошибка отправки заказа официанта:', err));
     setShowPosModal(false); setPosCart({});
   };
 
@@ -213,7 +210,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       payMethod: payMethod 
     };
     setOrders(prev => [newOrder, ...(prev || [])]); 
-    sendOrderToPaloma(buildPalomaOrder(newOrder)).catch(console.error);
+    // 🔥 ПАЛОМА: отправляем заказ
+    const palomaPayload = buildPalomaOrder(newOrder);
+    sendOrderToPaloma(palomaPayload)
+      .then(() => console.log('✅ Заказ кассира отправлен в Paloma'))
+      .catch(err => console.error('❌ Ошибка отправки заказа кассира:', err));
     setCashierCart({});
   };
 
@@ -323,7 +324,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                            setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
                        } else {
                            // 🔥 ПАЛОМА: отправляем заказ
-                           sendOrderToPaloma(buildPalomaOrder({ ...o, customerName: guestInfo.name })).catch(console.error);
+                           const palomaPayload = buildPalomaOrder({ ...o, customerName: guestInfo.name });
+                           sendOrderToPaloma(palomaPayload)
+                             .then(() => console.log('✅ Заказ подтверждён и отправлен в Paloma'))
+                             .catch(err => console.error('❌ Ошибка отправки подтверждённого заказа:', err));
                        }
                    }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                    <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Деньги не поступили</button>
@@ -392,29 +396,24 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   };
 
   // ================================================================
-  // 🔥 НОВОЕ МОДАЛЬНОЕ ОКНО — БЛОКНОТ ОФИЦИАНТА
+  // 🔥 НОВОЕ МОДАЛЬНОЕ ОКНО — БЛОКНОТ ОФИЦИАНТА (ИСПРАВЛЕНА ПЕЧАТЬ)
   // ================================================================
   const renderWaiterNotebookModal = () => {
     if (!activeOrdersList) return null;
     const { tableId, orders: tableOrders } = activeOrdersList;
     const table = (tables || []).find(t => t.id === tableId);
     
-    // Фильтруем только активные заказы (не delivered)
     const activeOrders = tableOrders.filter(o => o.status !== 'delivered' && o.status !== 'rejected');
 
-    // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ПЕРЕКЛЮЧЕНИЯ БЛЮДА (через уникальный ID)
     const toggleItemServed = (orderId, itemId) => {
       setOrders(prev => (prev || []).map(o => {
         if (o.id === orderId) {
           const updatedItems = (o.cartItems || []).map(item => {
-            // Если ID совпадает — переключаем isServed
             if (item.id === itemId) {
               return { ...item, isServed: !item.isServed };
             }
             return item;
           });
-
-          // Проверяем, все ли блюда отмечены
           const allServed = updatedItems.every(item => item.isServed === true);
           if (allServed && updatedItems.length > 0) {
             return { ...o, cartItems: updatedItems, status: 'delivered' };
@@ -425,38 +424,56 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       }));
     };
 
-    // 🔥 ФУНКЦИЯ ЗАКРЫТИЯ СЧЁТА И ПЕЧАТИ ЧЕКА
+    // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ЗАКРЫТИЯ СЧЁТА – отправляем полноценный заказ
     const closeBillAndPrint = () => {
       if (!table) return;
 
-      // 1. Считаем итоги
+      // Собираем все блюда из активных заказов
+      let allItems = [];
       let subtotal = 0;
-      const allItems = [];
       activeOrders.forEach(order => {
         (order.cartItems || []).forEach(item => {
           subtotal += (item.price * item.quantity);
-          allItems.push(item);
+          allItems.push({ ...item }); // копируем, чтобы не мутировать
         });
       });
+
+      if (allItems.length === 0) {
+        alert('Нет блюд для закрытия счёта');
+        return;
+      }
+
       const serviceFee = Math.round(subtotal * 0.15);
       const grandTotal = subtotal + serviceFee;
 
-      // 2. Формируем чек для Paloma (теперь используем buildPalomaOrder)
+      // Формируем заказ, который отправим в Paloma как новый (чтобы распечатать)
       const receiptOrder = {
         id: `REC-${Date.now()}`,
+        phone: 'waiter-' + currentUser.phone,
         customerName: currentUser.name,
-        phone: currentUser.phone,
+        tableId: table.id,
         tableName: table.name,
         cartItems: allItems,
+        itemsText: allItems.map(i => `${i.name} (x${i.quantity})`).join(', '),
+        subtotal: subtotal,
+        serviceFee: serviceFee,
         total: grandTotal,
         orderType: 'in_hall',
         payMethod: 'cash',
         deliveryAddress: '',
+        date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+        status: 'new', // отправляем как новый заказ для печати
+        waiterPhone: currentUser.phone,
+        waiterName: currentUser.name,
       };
-      // Отправляем как заказ на печать (но это не полный чек, а просто данные)
-      sendOrderToPaloma(buildPalomaOrder(receiptOrder)).catch(console.error);
 
-      // 4. Закрываем счёт в системе (все заказы в delivered)
+      // 🔥 ОТПРАВЛЯЕМ В PALOMA
+      const palomaPayload = buildPalomaOrder(receiptOrder);
+      sendOrderToPaloma(palomaPayload)
+        .then(() => console.log('✅ Чек закрыт и отправлен в Paloma для печати'))
+        .catch(err => console.error('❌ Ошибка печати чека:', err));
+
+      // Закрываем счёт локально
       setOrders(prev => (prev || []).map(o => {
         if (o.tableId === tableId && o.status !== 'delivered' && o.status !== 'rejected') {
           return { ...o, status: 'delivered' };
@@ -464,14 +481,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         return o;
       }));
 
-      // 5. Освобождаем стол
       setTables(prev => (prev || []).map(t => t.id === tableId ? { ...t, status: 'free', servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : t));
-
-      // 6. Закрываем блокнот
       setActiveOrdersList(null);
     };
 
-    // Подсчёт итогов для отображения
     let subtotal = 0;
     activeOrders.forEach(order => {
       (order.cartItems || []).forEach(item => {
@@ -481,13 +494,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const serviceFee = Math.round(subtotal * 0.15);
     const grandTotal = subtotal + serviceFee;
 
-    // Количество неподанных блюд
     const totalUnserved = tableOrders.reduce((sum, o) => {
       if (o.status === 'delivered' || o.status === 'rejected') return sum;
       return sum + (o.cartItems || []).filter(item => !item.isServed).length;
     }, 0);
 
-    // Проверка прав на закрытие счёта (только Старший или свой стол)
     const canCloseBill = currentUser.isSenior || table?.servedBy === currentUser.phone;
 
     return (
@@ -506,7 +517,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             ) : (
               activeOrders.map(order => {
                 const unservedItems = (order.cartItems || []).filter(item => !item.isServed);
-                if (unservedItems.length === 0) return null; // Если всё подано, не показываем
+                if (unservedItems.length === 0) return null;
                 
                 return (
                   <div key={order.id} style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '12px', borderLeft: '4px solid #3b82f6' }}>
@@ -533,7 +544,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             )}
           </div>
 
-          {/* 🔥 БЛОК ИТОГОВ И КНОПКА ЗАКРЫТИЯ */}
           <div style={{ marginTop: '15px', borderTop: '2px solid #f3f4f6', paddingTop: '15px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', color: '#4b5563' }}>
               <span>Блюда:</span>
@@ -649,7 +659,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   }
 
-  // --- КАБИНЕТ КАССИРА ---
+  // --- КАБИНЕТ КАССИРА (без изменений, но отправка уже есть) ---
   if (currentUser.role === 'cashier') {
     const cashPendingTables = (tables || []).filter(t => t.isCallingForBill);
     const posTotal = Object.values(cashierCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
@@ -700,7 +710,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                          setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
                          if(orderForTable) { 
                            changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); 
-                           sendOrderToPaloma(buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name })).catch(console.error);
+                           const palomaPayload = buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name });
+                           sendOrderToPaloma(palomaPayload)
+                             .then(() => console.log('✅ Оплата Kaspi подтверждена, заказ в Paloma'))
+                             .catch(err => console.error('❌ Ошибка отправки Kaspi:', err));
                          } 
                       }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
                       <button onClick={() => { 
@@ -708,7 +721,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                          setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
                          if(orderForTable) { 
                            changeOrderStatus(orderForTable.id, 'delivered', 'cash'); 
-                           sendOrderToPaloma(buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name })).catch(console.error);
+                           const palomaPayload = buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name });
+                           sendOrderToPaloma(palomaPayload)
+                             .then(() => console.log('✅ Оплата наличными подтверждена, заказ в Paloma'))
+                             .catch(err => console.error('❌ Ошибка отправки наличными:', err));
                          }
                       }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
                     </div>
@@ -930,7 +946,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                      const updatedOrder = {...o, status: 'new', payMethod: 'cash'};
                      changeOrderStatus(o.id, 'new', 'cash'); 
                      setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, servedBy: currentUser.phone } : t)); 
-                     sendOrderToPaloma(buildPalomaOrder({ ...updatedOrder, customerName: o.waiterName || currentUser.name })).catch(console.error);
+                     const palomaPayload = buildPalomaOrder({ ...updatedOrder, customerName: currentUser.name });
+                     sendOrderToPaloma(palomaPayload)
+                       .then(() => console.log('✅ Заказ официанта отправлен в Paloma'))
+                       .catch(err => console.error('❌ Ошибка:', err));
                   }} style={{width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Оплату принял (Отправить на кухню)</button>
                </div>
             ))}
@@ -939,7 +958,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           {/* СТОЛЫ ПРОСЯТ СЧЕТ */}
           {(tables || []).filter(t => t.isCallingForBill && (t.servedBy === currentUser.phone || currentUser.isSenior)).map(table => {
              const ro = cashPending.find(o => o.tableId === table.id);
-             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) { changeOrderStatus(ro.id, 'delivered'); sendOrderToPaloma(buildPalomaOrder({ ...ro, customerName: 'Гость' })).catch(console.error); } }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
+             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) { changeOrderStatus(ro.id, 'delivered'); const palomaPayload = buildPalomaOrder({ ...ro, customerName: 'Гость' }); sendOrderToPaloma(palomaPayload).catch(console.error); } }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
           })}
 
           {/* ГОТОВО ЗАБРАТЬ С КУХНИ */}
@@ -970,7 +989,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                     const isCallingSomeoneElse = t.isCalling && t.calledWaiter && t.calledWaiter !== currentUser.phone;
                     const isGeneralCall = t.isCalling && !t.calledWaiter;
 
-                    // 🔥 Подсчет активных неподанных блюд для этого стола
                     const tableActiveOrders = (orders || []).filter(o => 
                        o.tableId === t.id && 
                        o.status !== 'delivered' && 
@@ -1024,7 +1042,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                         <div style={{ display: 'flex', gap: '5px', marginTop: '10px', flexWrap: 'wrap' }}>
                           <button disabled={!canManage} onClick={() => { setPosTableId(t.id); setShowPosModal(true); }} style={{ flex: 1, minWidth: '100%', padding: '8px', background: canManage ? '#111827' : '#9ca3af', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: canManage ? 'pointer' : 'not-allowed' }}>+ Чек</button>
                           
-                          {/* 🔥 НОВАЯ КНОПКА БЛОКНОТА */}
                           {unservedCount > 0 && canManage && (
                             <button onClick={() => setActiveOrdersList({ tableId: t.id, orders: tableActiveOrders })} style={{ flex: 1, minWidth: '100%', padding: '8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
                               📋 Заказы ({unservedCount})

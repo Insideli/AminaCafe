@@ -3,9 +3,9 @@ import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
 import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
 
-// 🔥 ИМПОРТ FIREBASE ДЛЯ СМС
+// 🔥 ИМПОРТ FIREBASE ДЛЯ GOOGLE AUTH
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 
 // 🔥 ТВОИ КЛЮЧИ FIREBASE
 const firebaseConfig = {
@@ -63,23 +63,8 @@ function MainApp() {
   
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login_guest'); 
-  const [authStep, setAuthStep] = useState('phone'); 
-  const [tempPhone, setTempPhone] = useState('+7'); 
-  const [tempCode, setTempCode] = useState('');
-  const [tempName, setTempName] = useState(''); 
+  const [tempPhone, setTempPhone] = useState(''); 
   const [tempPassword, setTempPassword] = useState('');
-  const [isSending, setIsSending] = useState(false);
-
-  // Убираем синхронизацию с Paloma (она вызывает CORS-ошибку)
-  useEffect(() => {
-    import('./data.js').then(module => {
-      if (module.syncMenuWithPaloma) {
-        module.syncMenuWithPaloma(menu, setMenu)
-          .then(() => console.log("✅ Меню успешно загружено из Paloma365!"))
-          .catch(err => console.error("❌ Ошибка при загрузке меню:", err));
-      }
-    });
-  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -131,123 +116,68 @@ function MainApp() {
     }
   }, [roles, customers, currentUser, isAuthenticated, lang, setCurrentUser]);
 
-  const handlePhoneChange = (e) => {
-    let val = e.target.value;
-    if (authMode === 'login_staff') { setTempPhone(val); } 
-    else { val = val.replace(/[^\d+]/g, ''); if (!val.startsWith('+7')) { val = '+7' + val.replace(/^\+?7?/, ''); } if (val.length > 12) val = val.slice(0, 12); setTempPhone(val); }
-  };
-
   // ================================================================
-  // 🔥 ФУНКЦИЯ ОТПРАВКИ СМС (ОЧИСТКА reCAPTCHA)
+  // 🔥 ВХОД ДЛЯ ПЕРСОНАЛА
   // ================================================================
-  const handlePhoneSubmit = async (e) => { 
-    e.preventDefault(); 
-    if (isSending) return; 
-
-    if (window.recaptchaVerifier) {
-      try {
-        window.recaptchaVerifier.clear();
-      } catch (err) {}
-      window.recaptchaVerifier = null;
-    }
-    const container = document.getElementById('recaptcha-container');
-    if (container) {
-      container.innerHTML = '';
-    }
-
-    if (authMode === 'login_staff') {
-      const staffMember = (roles || {})[tempPhone];
-      if (!staffMember) return alert(lang === 'ru' ? "❌ Неверный логин сотрудника!" : "❌ Қызметкердің логині қате!");
-      if (staffMember.password !== tempPassword) return alert(lang === 'ru' ? "❌ Неверный пароль!" : "❌ Құпия сөз қате!");
-      if (!staffMember.onShift && staffMember.role !== 'admin' && staffMember.role !== 'developer') return alert(lang === 'ru' ? "❌ Сегодня не ваша смена!" : "❌ Бүгін сіздің ауысымыңыз емес!");
-      
-      const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
-      const updatedRoles = { ...roles, [tempPhone]: { ...staffMember, sessionToken: newToken } };
-      setRoles(updatedRoles);
-      
-      setCurrentUser({ role: staffMember.role, phone: tempPhone, name: staffMember.name, station: staffMember.station || null, isSenior: staffMember.isSenior || false, sessionToken: newToken });
-      setShowAuthModal(false);
-      return;
-    }
-
-    if (tempPhone.length !== 12) return alert(lang === 'ru' ? "❌ Введите полный номер: +7XXXXXXXXXX" : "❌ Толық нөмірді енгізіңіз: +7XXXXXXXXXX");
-    if (authMode === 'login_guest' && !customers[tempPhone]) return alert(lang === 'ru' ? "❌ Номер не найден! Создайте карту лояльности." : "❌ Нөмір табылмады! Тіркеліңіз.");
-    if (authMode === 'register_guest' && customers[tempPhone]) return alert(lang === 'ru' ? "❌ Этот номер уже есть в базе! Войдите как гость." : "❌ Бұл нөмір базада бар! Кіріңіз.");
-
-    setIsSending(true);
-
-    try {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        'size': 'invisible',
-        'callback': () => {},
-        'expired-callback': () => console.log('reCAPTCHA истекла')
-      });
-      
-      const appVerifier = window.recaptchaVerifier;
-      const confirmationResult = await signInWithPhoneNumber(auth, tempPhone, appVerifier);
-      window.confirmationResult = confirmationResult;
-      
-      setIsSending(false);
-      setAuthStep('sms');
-    } catch (error) {
-      console.error('Ошибка СМС:', error);
-      setIsSending(false);
-      if (window.recaptchaVerifier) {
-        try { window.recaptchaVerifier.clear(); } catch (e) {}
-        window.recaptchaVerifier = null;
-      }
-      alert(lang === 'ru' ? "❌ Ошибка отправки СМС: " + error.message : "❌ СМС жіберу қатесі: " + error.message);
-    }
-  };
-  
-  // ================================================================
-  // ПРОВЕРКА СМС КОДА
-  // ================================================================
-  const handleSmsSubmit = async (e) => { 
-    e.preventDefault(); 
-    if (!tempCode) return;
-
-    try {
-      await window.confirmationResult.confirm(tempCode);
-    } catch (error) {
-      return alert(lang === 'ru' ? "❌ Неверный код подтверждения!" : "❌ Қате растау коды!");
-    }
+  const handleStaffSubmit = (e) => {
+    e.preventDefault();
+    const staffMember = (roles || {})[tempPhone];
+    if (!staffMember) return alert(lang === 'ru' ? "❌ Неверный логин сотрудника!" : "❌ Қызметкердің логині қате!");
+    if (staffMember.password !== tempPassword) return alert(lang === 'ru' ? "❌ Неверный пароль!" : "❌ Құпия сөз қате!");
+    if (!staffMember.onShift && staffMember.role !== 'admin' && staffMember.role !== 'developer') return alert(lang === 'ru' ? "❌ Сегодня не ваша смена!" : "❌ Бүгін сіздің ауысымыңыз емес!");
 
     const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
+    const updatedRoles = { ...roles, [tempPhone]: { ...staffMember, sessionToken: newToken } };
+    setRoles(updatedRoles);
 
-    if (authMode === 'login_guest') { 
-      const updatedCustomers = { ...customers, [tempPhone]: { ...customers[tempPhone], sessionToken: newToken } };
-      setCustomers(updatedCustomers);
-      setCurrentUser({ role: 'guest', phone: tempPhone, name: customers[tempPhone].name || 'Гость', station: null, sessionToken: newToken }); 
-      setShowAuthModal(false); 
-    } else { 
-      setAuthStep('details'); 
-    } 
-  };
-  
-  const handleDetailsSubmit = (e) => { 
-    e.preventDefault(); 
-    if (!tempName.trim()) return alert(lang === 'ru' ? "Введите имя!" : "Атыңызды енгізіңіз!");
-
-    const nameRegex = /^[А-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ\s\-]+$/i;
-    if (!nameRegex.test(tempName)) {
-      return alert(lang === 'ru' ? "❌ Имя должно содержать только русские или казахские буквы! Без цифр и спецсимволов." : "❌ Есімде тек орыс немесе қазақ әріптері болуы керек! Сандар мен белгілерсіз.");
-    }
-
-    const nameExists = Object.values(customers || {}).some(c => c.name.toLowerCase() === tempName.toLowerCase().trim() && c.phone !== tempPhone);
-    if (nameExists) {
-      return alert(lang === 'ru' ? "❌ Это имя уже занято другим гостем. Пожалуйста, добавьте фамилию или начальную букву (например, Аруым Б.)." : "❌ Бұл есім бос емес. Тегіңізді немесе бас әріпті қосыңыз.");
-    }
-
-    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    setCustomers(prev => ({ ...(prev || {}), [tempPhone]: { phone: tempPhone, name: tempName.trim(), bonuses: 500, sessionToken: newToken } })); 
-    setCurrentUser({ role: 'guest', phone: tempPhone, name: tempName.trim(), station: null, sessionToken: newToken }); 
+    setCurrentUser({ role: staffMember.role, phone: tempPhone, name: staffMember.name, station: staffMember.station || null, isSenior: staffMember.isSenior || false, sessionToken: newToken });
     setShowAuthModal(false);
-    alert(lang === 'ru' ? "🎉 Успешно! Вам начислено 500 приветственных бонусов!" : "🎉 Сәтті өтті! Сізге 500 бонус берілді!");
+  };
+
+  // ================================================================
+  // 🔥 ВХОД ДЛЯ ГОСТЕЙ (GOOGLE AUTH)
+  // ================================================================
+  const handleGoogleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      const userId = user.email; // Используем email вместо телефона
+      const userName = user.displayName || 'Гость';
+
+      let updatedCustomers = { ...(customers || {}) };
+
+      // Если это новый гость, создаем профиль и даем бонусы
+      if (!updatedCustomers[userId]) {
+        updatedCustomers[userId] = {
+          phone: userId, // Сохраняем как phone для совместимости с заказами
+          name: userName,
+          bonuses: 500,
+          sessionToken: null
+        };
+      }
+
+      const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
+      updatedCustomers[userId].sessionToken = newToken;
+      setCustomers(updatedCustomers);
+
+      setCurrentUser({
+        role: 'guest',
+        phone: userId,
+        name: userName,
+        station: null,
+        sessionToken: newToken
+      });
+      setShowAuthModal(false);
+    } catch (error) {
+      console.error('Ошибка входа через Google:', error);
+      alert(lang === 'ru' ? "❌ Ошибка входа: " + error.message : "❌ Кіру қатесі: " + error.message);
+    }
   };
 
   const logoutOrLogin = () => { 
-    if (!isAuthenticated) { setAuthMode('login_guest'); setAuthStep('phone'); setTempPhone('+7'); setShowAuthModal(true); } 
+    if (!isAuthenticated) { setAuthMode('login_guest'); setShowAuthModal(true); } 
     else { setCurrentUser({role: 'guest', phone: '', name: '', station: null, sessionToken: null}); }
   };
 
@@ -280,61 +210,44 @@ function MainApp() {
       {showAuthModal && (
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
-            
-            <div id="recaptcha-container"></div>
 
             <button onClick={() => setShowAuthModal(false)} style={{ position: 'absolute', top: '15px', right: '15px', background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563' }}>✕</button>
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>
-              {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход' : 'Кіру') : authMode === 'register_guest' ? (lang === 'ru' ? 'Регистрация' : 'Тіркелу') : (lang === 'ru' ? 'Сотрудники' : 'Қызметкерлер')}
+              {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход для гостей' : 'Қонақтарға арналған кіру') : (lang === 'ru' ? 'Вход для персонала' : 'Қызметкерлер үшін')}
             </h2>
             
-            {authStep === 'phone' && (
-              <form onSubmit={handlePhoneSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Номер телефона' : 'Телефон нөмірі'}</label><input type="tel" placeholder={authMode === 'login_staff' ? "Логин" : "+7"} value={tempPhone} onChange={handlePhoneChange} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '18px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', fontWeight: 'bold', letterSpacing: '1px' }} /></div>
-                {authMode === 'login_staff' && (<div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Пароль' : 'Құпия сөз'}</label><input type="password" placeholder="***" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box' }} /></div>)}
-
-                <button 
-                  type="submit" 
-                  disabled={isSending} 
-                  style={{ 
-                    width: '100%', 
-                    padding: '16px', 
-                    borderRadius: '14px', 
-                    border: 'none', 
-                    backgroundColor: isSending ? '#9ca3af' : (authMode === 'login_staff' ? '#111827' : '#ea580c'), 
-                    color: '#fff', 
-                    fontWeight: '900', 
-                    fontSize: '16px', 
-                    cursor: isSending ? 'not-allowed' : 'pointer', 
-                    marginTop: '5px',
-                    transition: '0.2s'
-                  }}
-                >
-                  {isSending ? '⏳ Отправка...' : (lang === 'ru' ? 'Далее' : 'Жалғастыру')}
+            {authMode === 'login_guest' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '10px' }}>
+                  {lang === 'ru' ? 'Войдите через аккаунт Google, чтобы получать бонусы и оформлять заказы без СМС!' : 'Тапсырыс беріп, бонус алу үшін Google арқылы кіріңіз!'}
+                </p>
+                <button onClick={handleGoogleSignIn} style={{ width: '100%', padding: '14px', borderRadius: '14px', border: '2px solid #e5e7eb', backgroundColor: '#fff', color: '#111827', fontWeight: '900', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: '0.2s' }}>
+                  <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google" style={{width: '24px'}} />
+                  {lang === 'ru' ? 'Войти через Google' : 'Google арқылы кіру'}
                 </button>
-              </form>
-            )}
-            
-            {authStep === 'sms' && (
-              <form onSubmit={handleSmsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <p style={{margin: 0, fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>{lang === 'ru' ? 'Код отправлен на' : 'Код жіберілді'} {tempPhone}</p>
-                <input type="number" placeholder="СМС" value={tempCode} onChange={(e) => setTempCode(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', textAlign: 'center', fontSize: '20px', fontWeight: 'bold', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', letterSpacing: '3px' }} />
-                <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Подтвердить' : 'Растау'}</button>
-              </form>
-            )}
-            
-            {authStep === 'details' && (
-              <form onSubmit={handleDetailsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <div style={{textAlign: 'left'}}><label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Как к вам обращаться?' : 'Сіздің атыңыз?'}</label><input type="text" placeholder={lang === 'ru' ? "Ваше Имя" : "Атыңыз"} value={tempName} onChange={(e) => setTempName(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', fontWeight: 'bold' }} /></div>
-                <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#ea580c', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer' }}>{lang === 'ru' ? 'Создать аккаунт' : 'Аккаунт құру'}</button>
-              </form>
-            )}
+                <div style={{ marginTop: '15px', borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
+                  <button onClick={() => {setAuthMode('login_staff'); setTempPhone('');}} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold' }}>💼 {lang === 'ru' ? 'Я сотрудник' : 'Мен қызметкермін'}</button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleStaffSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div style={{textAlign: 'left'}}>
+                  <label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Логин (Номер)' : 'Логин'}</label>
+                  <input type="tel" placeholder="Например: 001002003" value={tempPhone} onChange={(e) => setTempPhone(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '18px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box', fontWeight: 'bold', letterSpacing: '1px' }} />
+                </div>
+                <div style={{textAlign: 'left'}}>
+                  <label style={{fontSize: '12px', fontWeight: 'bold', color: '#6b7280', marginLeft: '5px'}}>{lang === 'ru' ? 'Пароль' : 'Құпия сөз'}</label>
+                  <input type="password" placeholder="***" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box' }} />
+                </div>
 
-            <div style={{ marginTop: '25px', display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid #e5e7eb', paddingTop: '20px' }}>
-              {authMode !== 'login_guest' && authStep === 'phone' && <button onClick={() => {setAuthMode('login_guest'); setTempPhone('+7');}} style={{ background: 'none', border: 'none', color: '#4b5563', fontSize: '15px', cursor: 'pointer', fontWeight: 'bold' }}>{lang === 'ru' ? 'Уже есть аккаунт? Войти' : 'Аккаунтыңыз бар ма? Кіру'}</button>}
-              {authMode !== 'register_guest' && authStep === 'phone' && <button onClick={() => {setAuthMode('register_guest'); setTempPhone('+7');}} style={{ background: 'none', border: 'none', color: '#ea580c', fontSize: '15px', cursor: 'pointer', fontWeight: 'bold' }}>{lang === 'ru' ? 'Создать карту лояльности' : 'Тіркелу'}</button>}
-              {authMode !== 'login_staff' && authStep === 'phone' && <button onClick={() => {setAuthMode('login_staff'); setTempPhone('');}} style={{ padding: '12px', borderRadius: '12px', border: '2px solid #e5e7eb', background: 'transparent', color: '#6b7280', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer', marginTop: '10px' }}>💼 {lang === 'ru' ? 'Вход для персонала' : 'Қызметкерлер үшін'}</button>}
-            </div>
+                <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginTop: '5px' }}>
+                  {lang === 'ru' ? 'Войти' : 'Кіру'}
+                </button>
+                <div style={{ marginTop: '10px', borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
+                  <button type="button" onClick={() => setAuthMode('login_guest')} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold' }}>← {lang === 'ru' ? 'Назад к гостям' : 'Артқа'}</button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -1,7 +1,6 @@
 // GuestApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
-import { sendOrderToPaloma, buildPalomaOrder } from './paloma.js'; 
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
@@ -37,7 +36,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [pendingOrderId, setPendingOrderId] = useState(null); 
   
   const [orderType, setOrderType] = useState('in_hall'); 
-  const [address, setAddress] = useState({ street: '', house: '', apt: '', comment: '' });
+  // 🔥 ДОБАВЛЕНО ПОЛЕ phone ДЛЯ КУРЬЕРА
+  const [address, setAddress] = useState({ street: '', house: '', apt: '', comment: '', phone: '' });
 
   const [reviewOrder, setReviewOrder] = useState(null);
   const [reviewRating, setReviewRating] = useState(0);
@@ -65,6 +65,31 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     orderHistory: lang === 'ru' ? 'История заказов' : 'Тапсырыстар тарихы',
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
+
+  // 🔥 АВТОМАТИЧЕСКАЯ ПОСАДКА ЗА СТОЛ ПО QR-КОДУ (ИЗ ССЫЛКИ)
+  useEffect(() => {
+    if (currentUser.isAnonymous) return;
+    const params = new URLSearchParams(window.location.search);
+    const tableId = params.get('table');
+    
+    if (tableId) {
+      const table = (tables || []).find(t => t.id === tableId);
+      if (table) {
+        if (table.status === 'free' && !table.bookedBy) {
+          // Стол свободен — сажаем гостя автоматически
+          setTables(prev => (prev || []).map(t => t.id === tableId ? { ...t, status: 'occupied', bookedBy: currentUser.phone, bookedTime: null, isCallingForBill: false, isCalling: false, calledWaiter: null } : t));
+          setOrderType('in_hall');
+          alert(lang === 'ru' ? `Вы сели за ${table.name}!` : `Сіз ${table.name} отырдыңыз!`);
+        } else if (table.bookedBy !== currentUser.phone) {
+          // Кто-то другой уже сидит или бронь
+          alert(lang === 'ru' ? "Этот столик занят или забронирован." : "Бұл үстел бос емес.");
+        }
+      }
+      // Очищаем ссылку, чтобы при обновлении страницы код не срабатывал заново
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [currentUser.isAnonymous, currentUser.phone, lang]);
+
 
   useEffect(() => {
     if (!currentUser.isAnonymous && currentUser.phone) {
@@ -120,8 +145,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       
       if (checkOrder) {
         if (checkOrder.status === 'new') { 
-          const palomaPayload = buildPalomaOrder({ ...checkOrder, customerName: currentUser.name });
-          sendOrderToPaloma(palomaPayload).catch(console.error);
           if (checkOrder.orderType === 'booking_deposit') {
              setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
              setPaymentStatus('booking_success');
@@ -251,7 +274,10 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const createOrderObject = (statusToSet, assignedWaiterPhone = null, assignedWaiterName = null, payMethod = 'kaspi') => {
     const text = cartItemsArray.length > 0 ? cartItemsArray.map(i => `${i.name} (x${i.quantity})`).join(', ') : "Обычный заказ";
-    const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Коммент: ${address.comment}` : '';
+    
+    // 🔥 ДОБАВЛЯЕМ НОМЕР ТЕЛЕФОНА В АДРЕС ДЛЯ КУРЬЕРА
+    const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Тел: ${address.phone}. Коммент: ${address.comment}` : '';
+    
     return { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, 
       phone: currentUser.phone,
@@ -280,7 +306,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const handlePayClick = () => {
     if (cartItemsArray.length === 0 && !isPreOrderFlow) return alert("Выберите блюда!");
-    if (orderType === 'delivery' && !address.street) return alert("Укажите адрес доставки или используйте геоданные!");
+    
+    // 🔥 ПРОВЕРКА НАЛИЧИЯ АДРЕСА И НОМЕРА ТЕЛЕФОНА ПРИ ДОСТАВКЕ
+    if (orderType === 'delivery') {
+       if (!address.street) return alert("Укажите адрес доставки или используйте геоданные!");
+       if (!address.phone) return alert("Укажите номер телефона для связи с курьером!");
+    }
+    
     if (orderType === 'in_hall' && !activeTable) return alert(lang === 'ru' ? 'Оплата в зале доступна только при заказе за столиком в заведении!' : 'Залда төлеу тек залда отырғанда ғана мүмкін!');
 
     if (orderType === 'in_hall') {
@@ -791,7 +823,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               </div>
             )}
 
-            {/* ✅ ИСПРАВЛЕННЫЙ ЭКРАН ОТКЛОНЕНИЯ ДЛЯ ГОСТЯ С КРАСИВОЙ ИКОНКОЙ */}
             {paymentStatus === 'rejected' && (
               <div style={{textAlign: 'center', padding: '30px 0'}}>
                 <div style={{fontSize: '80px', marginBottom: '10px', color: '#dc2626'}}>
@@ -809,14 +840,12 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                 </p>
                 <div style={{display: 'flex', gap: '10px'}}>
                   <button onClick={() => { 
-                    // Повторная попытка — обновляем статус существующего заказа
                     if (pendingOrderId) {
                       setOrders(prev => (prev || []).map(o => 
                         o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
                       ));
                       setPaymentStatus('processing');
                     } else {
-                      // Если ID потерян — создаем заново
                       if (isPreOrderFlow) {
                         confirmBookingTransfer();
                       } else {
@@ -829,7 +858,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <button onClick={() => { 
                     setPaymentStatus('idle'); 
                     setActiveGuestTab('profile'); 
-                    setShowSupportModal(true); // Открыть поддержку
+                    setShowSupportModal(true); 
                   }} style={{flex: 1, padding: '16px', borderRadius: '14px', border: '2px solid #3b82f6', background: 'transparent', color: '#3b82f6', fontWeight: '900', fontSize: '15px', cursor: 'pointer'}}>
                     💬 В поддержку
                   </button>
@@ -1033,17 +1062,25 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
               <button onClick={() => setOrderType('takeaway')} style={{ flex: 1, padding: '10px 5px', borderRadius: '8px', border: 'none', backgroundColor: orderType === 'takeaway' ? '#111827' : 'transparent', color: orderType === 'takeaway' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '13px' }}>{t.takeaway}</button>
               <button onClick={() => setOrderType('delivery')} style={{ flex: 1, padding: '10px 5px', borderRadius: '8px', border: 'none', backgroundColor: orderType === 'delivery' ? '#111827' : 'transparent', color: orderType === 'delivery' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer', transition: '0.2s', fontSize: '13px' }}>{t.delivery}</button>
             </div>
+            
+            {/* 🔥 ОБНОВЛЕННЫЙ БЛОК ДОСТАВКИ */}
             {orderType === 'delivery' && (
               <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '2px solid #ea580c', boxSizing: 'border-box' }}>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
                    <h3 style={{ margin: 0, color: '#111827', fontSize: '16px' }}>📍 {lang === 'ru' ? 'Куда доставить?' : 'Қайда жеткізу керек?'}</h3>
                    <button onClick={handleGetLocation} style={{background: '#e0f2fe', color: '#0369a1', border: 'none', padding: '8px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer'}}>🗺️ {lang === 'ru' ? 'По геоданным' : 'Геодеректер бойынша'}</button>
                 </div>
+                
+                <input type="tel" placeholder={lang === 'ru' ? "Номер телефона для курьера *" : "Курьерге арналған телефон нөмірі *"} value={address.phone} onChange={e=>setAddress({...address, phone: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
+                
                 <input type="text" placeholder={lang === 'ru' ? "Улица или ссылка с карты *" : "Көше немесе картадан сілтеме *"} value={address.street} onChange={e=>setAddress({...address, street: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
+                
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}><input type="text" placeholder={lang === 'ru' ? "Дом *" : "Үй *"} value={address.house} onChange={e=>setAddress({...address, house: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/><input type="text" placeholder={lang === 'ru' ? "Квартира" : "Пәтер"} value={address.apt} onChange={e=>setAddress({...address, apt: e.target.value})} style={{ flex: 1, minWidth: '0', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/></div>
+                
                 <input type="text" placeholder={lang === 'ru' ? "Комментарий курьеру" : "Курьерге пікір"} value={address.comment} onChange={e=>setAddress({...address, comment: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '10px', border: '1px solid #d1d5db', fontSize: '14px', color: '#111827', boxSizing: 'border-box', background: '#f9fafb' }}/>
               </div>
             )}
+            
             <div style={{backgroundColor: '#fff', borderRadius: '20px', padding: '15px', boxSizing: 'border-box'}}>
               {cartItemsArray.length === 0 ? <p style={{textAlign: 'center', color: '#6b7280'}}>{t.emptyCart}</p> : cartItemsArray.map(item => (
                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f3f4f6' }}>
@@ -1072,7 +1109,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <p style={{ color: '#10b981', fontSize: '24px', fontWeight: '900', margin: 0 }}>Кэшбек: {availableBonuses} ₸</p>
                 </div>
 
-                {/* Кнопка выхода — теперь сверху! */}
                 <button onClick={logout} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #d1d5db', background: '#fff', color: '#ef4444', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer' }}>{lang === 'ru' ? 'Выйти из аккаунта' : 'Аккаунттан шығу'}</button>
 
                 <button onClick={handleInstallClick} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
@@ -1083,7 +1119,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                    💬 {lang === 'ru' ? 'Написать разработчикам' : 'Қолдау қызметіне жазу'}
                 </button>
 
-                {/* 🔥 НОВЫЙ БЛОК: Оставить отзыв о кафе */}
                 <button onClick={() => setShowReviewFromProfile(true)} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #f59e0b', background: '#fef3c7', color: '#b45309', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                    ⭐️ {lang === 'ru' ? 'Оставить отзыв о кафе' : 'Кафе туралы пікір қалдыру'}
                 </button>

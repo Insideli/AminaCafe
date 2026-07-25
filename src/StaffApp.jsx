@@ -288,7 +288,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       <div style={{ position: 'fixed', inset: 0, height: '100%', background: 'rgba(17,24,39,0.7)', zIndex: 9999, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', backdropFilter: 'blur(4px)' }} onClick={() => setShowInfoModal(false)}>
         <div style={{ background: '#fff', width: '100%', maxWidth: '500px', borderRadius: '28px 28px 0 0', padding: '30px 25px', boxSizing: 'border-box', maxHeight: '90vh', display: 'flex', flexDirection: 'column', textAlign: 'left', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
           <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-            <h2 style={{margin: 0, fontSize: '20px', color: '#111827'}}>ℹ️ Обучение</h2>
+            <h2 style={{margin: '0', fontSize: '20px', color: '#111827'}}>ℹ️ Обучение</h2>
             <button onClick={() => setShowInfoModal(false)} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontWeight: 'bold'}}>✕</button>
           </div>
           <h3 style={{margin: '0 0 10px 0', color: '#111827', fontSize: '18px'}}>📖 Инструкция ({roleTitle}):</h3>
@@ -299,9 +299,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   };
 
-  // ================================================================
-  // 🔥 ИСПРАВЛЕННЫЙ БЛОК ОЖИДАНИЯ ПОДТВЕРЖДЕНИЯ (только transfer_pending)
-  // ================================================================
   const PendingTransfersBlock = () => {
     const pendingTransfers = (orders || []).filter(o => o.status === 'transfer_pending');
     if (pendingTransfers.length === 0) return null;
@@ -323,7 +320,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                        if (o.orderType === 'booking_deposit') {
                            setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
                        } else {
-                           // 🔥 ПАЛОМА: отправляем заказ
                            const palomaPayload = buildPalomaOrder({ ...o, customerName: guestInfo.name });
                            sendOrderToPaloma(palomaPayload)
                              .then(() => console.log('✅ Заказ подтверждён и отправлен в Paloma'))
@@ -395,9 +391,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   };
 
-  // ================================================================
-  // 🔥 НОВОЕ МОДАЛЬНОЕ ОКНО — БЛОКНОТ ОФИЦИАНТА (ИСПРАВЛЕНА ПЕЧАТЬ)
-  // ================================================================
   const renderWaiterNotebookModal = () => {
     if (!activeOrdersList) return null;
     const { tableId, orders: tableOrders } = activeOrdersList;
@@ -424,17 +417,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       }));
     };
 
-    // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ЗАКРЫТИЯ СЧЁТА – отправляем полноценный заказ
     const closeBillAndPrint = () => {
       if (!table) return;
 
-      // Собираем все блюда из активных заказов
       let allItems = [];
       let subtotal = 0;
       activeOrders.forEach(order => {
         (order.cartItems || []).forEach(item => {
           subtotal += (item.price * item.quantity);
-          allItems.push({ ...item }); // копируем, чтобы не мутировать
+          allItems.push({ ...item }); 
         });
       });
 
@@ -446,7 +437,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       const serviceFee = Math.round(subtotal * 0.15);
       const grandTotal = subtotal + serviceFee;
 
-      // Формируем заказ, который отправим в Paloma как новый (чтобы распечатать)
       const receiptOrder = {
         id: `REC-${Date.now()}`,
         phone: 'waiter-' + currentUser.phone,
@@ -462,18 +452,16 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         payMethod: 'cash',
         deliveryAddress: '',
         date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-        status: 'new', // отправляем как новый заказ для печати
+        status: 'new', 
         waiterPhone: currentUser.phone,
         waiterName: currentUser.name,
       };
 
-      // 🔥 ОТПРАВЛЯЕМ В PALOMA
       const palomaPayload = buildPalomaOrder(receiptOrder);
       sendOrderToPaloma(palomaPayload)
         .then(() => console.log('✅ Чек закрыт и отправлен в Paloma для печати'))
         .catch(err => console.error('❌ Ошибка печати чека:', err));
 
-      // Закрываем счёт локально
       setOrders(prev => (prev || []).map(o => {
         if (o.tableId === tableId && o.status !== 'delivered' && o.status !== 'rejected') {
           return { ...o, status: 'delivered' };
@@ -659,7 +647,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     );
   }
 
-  // --- КАБИНЕТ КАССИРА (без изменений, но отправка уже есть) ---
   if (currentUser.role === 'cashier') {
     const cashPendingTables = (tables || []).filter(t => t.isCallingForBill);
     const posTotal = Object.values(cashierCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);

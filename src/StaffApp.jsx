@@ -1,7 +1,7 @@
 // StaffApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, INITIAL_TABLES, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
-import { sendOrderToPaloma, buildPalomaOrder } from './paloma.js'; 
+import { sendOrderToPaloma, buildPalomaOrder, fetchPalomaMenu } from './paloma.js'; // 🔥 ДОБАВИЛИ fetchPalomaMenu
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
@@ -82,6 +82,61 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
   const changeOrderStatus = (id, status, payMethod = null) => setOrders(prev => (prev || []).map(o => o.id === id ? { ...o, status, payMethod: payMethod || o.payMethod } : o));
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
+
+  // 🔥 НОВАЯ ФУНКЦИЯ: АВТОМАТИЧЕСКАЯ ЗАГРУЗКА МЕНЮ ИЗ ПАЛОМЫ
+  const handleSyncPaloma = async () => {
+    try {
+      alert('🔄 Начинаем загрузку меню из Paloma... Пожалуйста, подождите пару секунд.');
+      const data = await fetchPalomaMenu();
+      let newMenu = [];
+
+      if (data && data.item_groups) {
+        data.item_groups.forEach(group => {
+          const groupName = group.name || '';
+          
+          // 🧠 Умная сортировка: Раскидываем папки из Паломы по нашим категориям на сайте
+          let catId = 'hot'; // По умолчанию кидаем в Горячее
+          const lower = groupName.toLowerCase();
+          
+          if (lower.includes('напит') || lower.includes('бар') || lower.includes('коктейль') || lower.includes('алкоголь') || lower.includes('вино') || lower.includes('водка') || lower.includes('виски') || lower.includes('коньяк') || lower.includes('чай') || lower.includes('кофе')) catId = 'drinks';
+          else if (lower.includes('салат') || lower.includes('закуск') || lower.includes('холод')) catId = 'cold';
+          else if (lower.includes('десерт') || lower.includes('сладк')) catId = 'desserts';
+          else if (lower.includes('завтрак')) catId = 'breakfast';
+          else if (lower.includes('паста') || lower.includes('пицца') || lower.includes('фаст фуд') || lower.includes('бургер')) catId = 'pasta';
+          else if (lower.includes('суп') || lower.includes('первое')) catId = 'soups';
+
+          if (group.items && Array.isArray(group.items)) {
+            group.items.forEach(item => {
+              // Берем только те блюда, которые разрешены для показа в меню (i_useInMenu: 1)
+              if (item.i_useInMenu === 1) {
+                newMenu.push({
+                  id: item.object_id.toString(),
+                  paloma_id: item.object_id, // 🔥 Тот самый ID для правильного заказа!
+                  name: item.name,
+                  price: Number(item.price) || 0,
+                  ingredients: item.description || `Из категории: ${groupName}`, // Описание или имя папки
+                  category: catId,
+                  isStop: item.mark_deleted === 1, // 🔥 Автоматический стоп-лист! Если удалено в Паломе - ставим стоп.
+                  imgUrl: item.image || ''
+                });
+              }
+            });
+          }
+        });
+      }
+
+      if (newMenu.length > 0) {
+        setMenu(newMenu);
+        alert(`✅ Успех! Загружено ${newMenu.length} позиций из Paloma365! Меню на сайте обновлено.`);
+      } else {
+        alert('❌ Не удалось найти блюда в ответе от Paloma. Возможно меню пустое.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('❌ Ошибка при скачивании меню: ' + err.message);
+    }
+  };
+
 
   const handleAddWaiter = () => { 
     if(!newWaiter.phone || !newWaiter.name || !newWaiter.password) return; 
@@ -1102,8 +1157,14 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
         {adminTab === 'menu' && (
           <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
-            <h3 style={{color: '#111827', marginBottom: '15px'}}>Меню заведения:</h3>
-            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Внимание: Ручное редактирование отключено. Все стоп-листы и позиции автоматически синхронизируются с кассой Paloma365.</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h3 style={{color: '#111827', margin: 0}}>Меню заведения:</h3>
+              <button onClick={handleSyncPaloma} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(16,185,129,0.2)' }}>
+                🔄 Синхронизировать с Paloma
+              </button>
+            </div>
+            
+            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Внимание: Ручное редактирование отключено. Все стоп-листы и позиции автоматически затягиваются из кассы Paloma365 при нажатии на кнопку "Синхронизировать".</p>
             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
               {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
             </div>

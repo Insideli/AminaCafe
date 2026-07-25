@@ -1,7 +1,7 @@
 // GuestApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
-import { sendOrderToPaloma, buildPalomaOrder } from './paloma.js'; // 🔥 ПАЛОМА
+import { sendOrderToPaloma, buildPalomaOrder } from './paloma.js'; 
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
@@ -43,7 +43,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState('');
 
-  // Новые состояния для отзывов из профиля
   const [showReviewFromProfile, setShowReviewFromProfile] = useState(false);
   const [profileReviewRating, setProfileReviewRating] = useState(0);
   const [profileReviewText, setProfileReviewText] = useState('');
@@ -67,11 +66,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
 
-  // ================================================================
-  // 🔥 ИНТЕГРАЦИЯ PALOMA POS (старая функция удалена, используем новую из paloma.js)
-  // ================================================================
-
-  // АВТО-ОТКРЫТИЕ ИНСТРУКЦИИ ПРИ ПЕРВОМ ВХОДЕ
   useEffect(() => {
     if (!currentUser.isAnonymous && currentUser.phone) {
       const hasSeen = localStorage.getItem(`onboarding_seen_${currentUser.phone}`);
@@ -120,20 +114,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0";
   }, []);
 
-  // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ЛОГИКА — Ошибка брони не зависает, ловит удаление
-  // ================================================================
   useEffect(() => {
     if (pendingOrderId && paymentStatus === 'processing') {
       const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
       
       if (checkOrder) {
-        // ✅ Кассир подтвердил — статус 'new'
         if (checkOrder.status === 'new') { 
-          // 🔥 ПАЛОМА: отправляем заказ
           const palomaPayload = buildPalomaOrder({ ...checkOrder, customerName: currentUser.name });
           sendOrderToPaloma(palomaPayload).catch(console.error);
-          // Остальная логика
           if (checkOrder.orderType === 'booking_deposit') {
              setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
              setPaymentStatus('booking_success');
@@ -142,15 +130,11 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           }
           setPendingOrderId(null); 
         } 
-        // ✅ Кассир отклонил — статус 'rejected' (не сбрасываем pendingOrderId!)
         else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined' || checkOrder.status === 'cancelled') { 
           setPaymentStatus('rejected'); 
-          // ❗ НЕ СБРАСЫВАЕМ pendingOrderId — оставляем для повторной попытки!
         }
       } else {
-        // ❌ Если заказ на бронь был УДАЛЕН кассиром из списка
         setPaymentStatus('rejected');
-        // ❗ Тоже не сбрасываем
       }
     }
   }, [orders, pendingOrderId, paymentStatus, currentUser.phone]);
@@ -191,11 +175,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     setShowTimeModal(false); 
   };
 
-  // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОДТВЕРЖДЕНИЯ БРОНИ
-  // ================================================================
   const confirmBookingTransfer = () => {
-    // Если есть pendingOrderId и он в статусе rejected — обновляем существующий заказ
     if (pendingOrderId && paymentStatus === 'rejected') {
       const existingOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (existingOrder && existingOrder.orderType === 'booking_deposit') {
@@ -203,16 +183,14 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
         ));
         setPaymentStatus('processing');
-        // Кассиру снова придет уведомление
         return;
       }
     }
 
-    // Создаем новый заказ на бронь
     const newOrder = {
        id: `BKG-${Math.floor(Math.random() * 10000)}`,
        phone: currentUser.phone,
-       customerName: currentUser.name, // 🔥 ПАЛОМА
+       customerName: currentUser.name, 
        tableId: preOrderTableId,
        tableName: 'Залог за стол',
        cartItems: [],
@@ -267,7 +245,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const cartItemsArray = Object.values(cart || {});
   const totalItemsCount = cartItemsArray.reduce((sum, item) => sum + item.quantity, 0);
   const baseSubtotal = cartItemsArray.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  // 🔥 ДОБАВЛЯЕМ 15%
   const serviceFee = Math.round(baseSubtotal * 0.15);
   const totalAmount = isPreOrderFlow ? (baseSubtotal === 0 ? 1000 : Math.round((baseSubtotal + serviceFee) / 2)) : (baseSubtotal + serviceFee);
   const availableBonuses = customers[currentUser?.phone]?.bonuses || 0;
@@ -278,7 +255,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     return { 
       id: `ORD-${Math.floor(Math.random() * 10000)}`, 
       phone: currentUser.phone,
-      customerName: currentUser.name || 'Гость', // 🔥 ПАЛОМА
+      customerName: currentUser.name || 'Гость', 
       tableId: activeTable?.id || orderType, 
       tableName: activeTableName, 
       cartItems: cartItemsArray, 
@@ -313,11 +290,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     }
   };
 
-  // ================================================================
-  // 🔥 ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОДТВЕРЖДЕНИЯ ПЕРЕВОДА (для заказов)
-  // ================================================================
   const confirmTransfer = () => {
-    // Если есть pendingOrderId и он в статусе rejected — обновляем существующий заказ
     if (pendingOrderId && paymentStatus === 'rejected') {
       const existingOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (existingOrder && existingOrder.orderType !== 'booking_deposit') {
@@ -329,7 +302,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       }
     }
 
-    // Если нет pendingOrderId — создаем новый заказ
     const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
     setOrders(prev => [newOrder, ...(prev || [])]);
     setPendingOrderId(newOrder.id);
@@ -374,7 +346,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
      setReviewOrder(null); setReviewRating(0); setReviewText(''); alert('Спасибо за ваш отзыв!');
   };
 
-  // Функция для отправки отзыва из профиля
   const submitProfileReview = () => {
      if (profileReviewRating === 0) return alert('Выберите оценку в звездах!');
      if (profileReviewRating <= 3 && profileReviewText.trim().length === 0) return alert('Пожалуйста, напишите причину низкой оценки, чтобы мы стали лучше.');

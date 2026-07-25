@@ -54,13 +54,13 @@ function MainApp() {
   const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
-  
+
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
   const [lang, setLang] = useDeviceStorage('amina_lang_device', 'ru');
   const isAuthenticated = !!currentUser.phone;
 
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-  
+
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login_guest'); 
   const [tempPhone, setTempPhone] = useState(''); 
@@ -115,6 +115,16 @@ function MainApp() {
       }
     }
   }, [roles, customers, currentUser, isAuthenticated, lang, setCurrentUser]);
+
+  useEffect(() => {
+    import('./data.js').then(module => {
+      if (module.syncMenuWithPaloma) {
+        module.syncMenuWithPaloma(menu, setMenu)
+          .then(() => console.log("✅ Меню успешно загружено из Paloma365!"))
+          .catch(err => console.error("❌ Ошибка при загрузке меню:", err));
+      }
+    });
+  }, []);
 
   // ================================================================
   // 🔥 ВХОД ДЛЯ ПЕРСОНАЛА
@@ -206,7 +216,7 @@ function MainApp() {
         <GuestApp currentUser={activeUser} logout={logoutOrLogin} lang={lang} setLang={setLang} deferredPrompt={deferredPrompt} /> : 
         <StaffApp currentUser={activeUser} logout={logoutOrLogin} lang={lang} setLang={setLang} />
       }
-      
+
       {showAuthModal && (
         <div style={{ position: 'fixed', inset: 0, height: '100dvh', overscrollBehavior: 'none', backgroundColor: 'rgba(17, 24, 39, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', zIndex: 99999, backdropFilter: 'blur(5px)' }}>
           <div style={{ backgroundColor: '#fff', padding: '30px', borderRadius: '24px', width: '100%', maxWidth: '400px', textAlign: 'center', position: 'relative', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
@@ -215,7 +225,7 @@ function MainApp() {
             <h2 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: '900', color: '#111827' }}>
               {authMode === 'login_guest' ? (lang === 'ru' ? 'Вход для гостей' : 'Қонақтарға арналған кіру') : (lang === 'ru' ? 'Вход для персонала' : 'Қызметкерлер үшін')}
             </h2>
-            
+
             {authMode === 'login_guest' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '10px' }}>

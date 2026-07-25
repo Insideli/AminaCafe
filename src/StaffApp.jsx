@@ -83,7 +83,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const changeOrderStatus = (id, status, payMethod = null) => setOrders(prev => (prev || []).map(o => o.id === id ? { ...o, status, payMethod: payMethod || o.payMethod } : o));
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
 
-  // 🔥 НОВАЯ ФУНКЦИЯ: АВТОМАТИЧЕСКАЯ ЗАГРУЗКА МЕНЮ ИЗ ПАЛОМЫ
+  // 🔥 ИДЕАЛЬНАЯ СИНХРОНИЗАЦИЯ С PALOMA365 (ОБНОВЛЕННАЯ С КАТЕГОРИЯМИ И ФИЛЬТРОМ МУСОРА)
   const handleSyncPaloma = async () => {
     try {
       alert('🔄 Начинаем загрузку меню из Paloma... Пожалуйста, подождите пару секунд.');
@@ -93,30 +93,35 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       if (data && data.item_groups) {
         data.item_groups.forEach(group => {
           const groupName = group.name || '';
-          
-          // 🧠 Умная сортировка: Раскидываем папки из Паломы по нашим категориям на сайте
-          let catId = 'hot'; // По умолчанию кидаем в Горячее
           const lower = groupName.toLowerCase();
           
-          if (lower.includes('напит') || lower.includes('бар') || lower.includes('коктейль') || lower.includes('алкоголь') || lower.includes('вино') || lower.includes('водка') || lower.includes('виски') || lower.includes('коньяк') || lower.includes('чай') || lower.includes('кофе')) catId = 'drinks';
-          else if (lower.includes('салат') || lower.includes('закуск') || lower.includes('холод')) catId = 'cold';
-          else if (lower.includes('десерт') || lower.includes('сладк')) catId = 'desserts';
-          else if (lower.includes('завтрак')) catId = 'breakfast';
-          else if (lower.includes('паста') || lower.includes('пицца') || lower.includes('фаст фуд') || lower.includes('бургер')) catId = 'pasta';
+          // 🎯 ИДЕАЛЬНОЕ СОВПАДЕНИЕ С КАТЕГОРИЯМИ САЙТА
+          let catId = 'hot'; 
+          if (lower.includes('салат')) catId = 'salads';
           else if (lower.includes('суп') || lower.includes('первое')) catId = 'soups';
+          else if (lower.includes('закуск')) catId = 'snacks';
+          else if (lower.includes('пицц')) catId = 'pizza';
+          else if (lower.includes('фаст') || lower.includes('бургер')) catId = 'fastfood';
+          else if (lower.includes('напит') || lower.includes('чай') || lower.includes('кофе') || lower.includes('сок')) catId = 'drinks';
+          else if (lower.includes('бар') || lower.includes('алког') || lower.includes('вино') || lower.includes('водка') || lower.includes('пиво') || lower.includes('виски') || lower.includes('коньяк')) catId = 'bar';
+          else if (lower.includes('десерт') || lower.includes('сладк') || lower.includes('торт') || lower.includes('пирож')) catId = 'desserts';
+          else if (lower.includes('завтрак')) catId = 'breakfast';
+          else if (lower.includes('паста')) catId = 'pasta';
+          else if (lower.includes('горяч') || lower.includes('втор') || lower.includes('мясо') || lower.includes('шашлык') || lower.includes('рыба') || lower.includes('птиц') || lower.includes('компани')) catId = 'hot';
+          else catId = 'other';
 
           if (group.items && Array.isArray(group.items)) {
             group.items.forEach(item => {
-              // Берем только те блюда, которые разрешены для показа в меню (i_useInMenu: 1)
-              if (item.i_useInMenu === 1) {
+              // 🧹 ФИЛЬТР МУСОРА: Берем только АКТИВНЫЕ блюда (mark_deleted !== 1) и с нормальным использованием в меню
+              if (item.mark_deleted !== 1 && item.i_useInMenu === 1 && Number(item.price) > 0) {
                 newMenu.push({
                   id: item.object_id.toString(),
-                  paloma_id: item.object_id, // 🔥 Тот самый ID для правильного заказа!
+                  paloma_id: item.object_id,
                   name: item.name,
                   price: Number(item.price) || 0,
-                  ingredients: item.description || `Из категории: ${groupName}`, // Описание или имя папки
+                  ingredients: item.description || `Из категории: ${groupName}`,
                   category: catId,
-                  isStop: item.mark_deleted === 1, // 🔥 Автоматический стоп-лист! Если удалено в Паломе - ставим стоп.
+                  isStop: false, // Активные позиции сразу готовы к заказу
                   imgUrl: item.image || ''
                 });
               }
@@ -127,7 +132,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
       if (newMenu.length > 0) {
         setMenu(newMenu);
-        alert(`✅ Успех! Загружено ${newMenu.length} позиций из Paloma365! Меню на сайте обновлено.`);
+        alert(`✅ Успех! Загружено ${newMenu.length} чистых активных блюд из Paloma365!`);
       } else {
         alert('❌ Не удалось найти блюда в ответе от Paloma. Возможно меню пустое.');
       }
@@ -136,7 +141,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       alert('❌ Ошибка при скачивании меню: ' + err.message);
     }
   };
-
 
   const handleAddWaiter = () => { 
     if(!newWaiter.phone || !newWaiter.name || !newWaiter.password) return; 
@@ -1164,7 +1168,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               </button>
             </div>
             
-            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Внимание: Ручное редактирование отключено. Все стоп-листы и позиции автоматически затягиваются из кассы Paloma365 при нажатии на кнопку "Синхронизировать".</p>
+            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Нажмите «Синхронизировать», чтобы подтянуть только активные блюда с реальными ценами из Paloma365.</p>
             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
               {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
             </div>
@@ -1172,7 +1176,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               {displayedAdminMenu.map(item => (
                 <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb', opacity: item.isStop ? 0.6 : 1 }}>
                   <div style={{fontSize: '25px', display: 'flex', justifyContent: 'center'}}>
-                    {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : item.img}
+                    {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : '🍲'}
                   </div>
                   <div style={{minWidth: 0}}>
                     <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>

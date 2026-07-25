@@ -71,6 +71,15 @@ function MainApp() {
   const [isSending, setIsSending] = useState(false);
 
   // Убираем синхронизацию с Paloma (она вызывает CORS-ошибку)
+  useEffect(() => {
+    import('./data.js').then(module => {
+      if (module.syncMenuWithPaloma) {
+        module.syncMenuWithPaloma(menu, setMenu)
+          .then(() => console.log("✅ Меню успешно загружено из Paloma365!"))
+          .catch(err => console.error("❌ Ошибка при загрузке меню:", err));
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

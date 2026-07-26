@@ -5,7 +5,6 @@ import { fetchPalomaMenu } from './paloma.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
-  // 🔥 ТЕПЕРЬ ГОСТИ ТОЖЕ ВИДЯТ ДИНАМИЧЕСКИЕ КАТЕГОРИИ ИЗ ПАЛОМЫ
   const [categories, setCategories] = useLocalStorage('amina_categories_v12', CATEGORIES); 
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
@@ -77,7 +76,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
 
-  // 🔥 УМНЫЙ ФИЛЬТР КАТЕГОРИЙ ДЛЯ ГОСТЕЙ (СКРЫВАЕМ МУСОР И АЛКОГОЛЬ ПРИ ДОСТАВКЕ)
   const hiddenGuestKeywords = ['посуд', 'упаковк', 'доп', 'сироп', 'служебн', 'хоз', 'без групп', 'расход', 'обслуживан'];
   const alcoholKeywords = ['бар', 'алког', 'вино', 'водка', 'пиво', 'виски', 'коньяк', 'шот'];
   
@@ -331,7 +329,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const handlePayClick = () => {
     if (cartItemsArray.length === 0 && !isPreOrderFlow) return alert("Выберите блюда!");
     
-    // 🔥 БЛОКИРОВКА АЛКОГОЛЯ ПРИ ДОСТАВКЕ
     if (orderType === 'delivery') {
        if (!address.street) return alert("Укажите адрес доставки или используйте геоданные!");
        if (!address.phone) return alert("Укажите номер телефона для связи с курьером!");
@@ -992,13 +989,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px' }}>
                      <button onClick={() => setSelectedCategory('all')} style={{ background: '#fff', border: '1px solid #e5e7eb', padding: '12px 20px', borderRadius: '14px', fontWeight: '900', color: '#111827', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>⬅ Назад к папкам</button>
-                     <h2 style={{ margin: 0, fontSize: '20px', color: '#111827', fontWeight: '900' }}>{visibleCategories.find(c => c.id === selectedCategory)?.icon} {visibleCategories.find(c => c.id === selectedCategory)?.name}</h2>
+                     <h2 style={{ margin: 0, fontSize: '20px', color: '#111827', fontWeight: '900' }}>{(categories || []).find(c => c.id === selectedCategory)?.icon} {(categories || []).find(c => c.id === selectedCategory)?.name}</h2>
                    </div>
                    
                    <div className="food-list">
                      {displayedMenu.map(item => (
                        <div key={item.id} className="food-card" style={{ opacity: item.isStop ? 0.6 : 1 }}>
-                          <div className="food-pic" style={{ filter: item.isStop ? 'grayscale(1)' : 'none' }}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover'}}/> : <span style={{fontSize: '24px'}}>{categories.find(c => c.id === item.category)?.icon || '🍲'}</span>}</div>
+                          <div className="food-pic" style={{ filter: item.isStop ? 'grayscale(1)' : 'none' }}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover'}}/> : <span style={{fontSize: '24px'}}>{(categories || []).find(c => c.id === item.category)?.icon || '🍲'}</span>}</div>
                           <div className="food-info">
                             <h3 className="food-name" style={{textDecoration: item.isStop ? 'line-through' : 'none', color: '#111827'}}>{item.name}</h3>
                             <p className="food-ingr">{item.ingredients}</p>

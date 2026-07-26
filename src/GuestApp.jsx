@@ -81,7 +81,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   
   const visibleCategories = (categories || []).filter(cat => {
      if (!cat || !cat.name) return false;
-     const lowerName = cat.name.toLowerCase();
+     const lowerName = (cat.name || '').toLowerCase();
      if (hiddenGuestKeywords.some(kw => lowerName.includes(kw))) return false;
      if (orderType === 'delivery' && alcoholKeywords.some(kw => lowerName.includes(kw))) return false;
      return true;
@@ -335,7 +335,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
        
        const hasAlcohol = cartItemsArray.some(item => {
           const cat = (categories || []).find(c => c.id === item.category);
-          if (!cat) return false;
+          if (!cat || !cat.name) return false;
           return alcoholKeywords.some(kw => cat.name.toLowerCase().includes(kw));
        });
        

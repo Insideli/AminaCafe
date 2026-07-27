@@ -1,0 +1,37 @@
+/* Единая дизайн-система AminaCafe */
+:root {
+  /* Цветовая палитра */
+  --primary: #111827;
+  --primary-hover: #374151;
+  --secondary: #f3f4f6;
+  --secondary-hover: #e5e7eb;
+  --success: #10b981;
+  --danger: #ef4444;
+  --background: #f4f5f7;
+  --surface: #ffffff;
+  --text-main: #111827;
+  --text-muted: #6b7280;
+  
+  /* Радиусы (скругления) */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  
+  /* Анимации */
+  --transition: 0.2s ease-in-out;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-main);
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Скрываем скроллбар для красоты мобильного интерфейса */
+::-webkit-scrollbar {
+  display: none;
+}
+

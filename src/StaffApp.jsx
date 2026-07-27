@@ -32,7 +32,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
   const [posCart, setPosCart] = useState({});
-  // 🔥 ПОИСК И КАТЕГОРИИ ДЛЯ КАССЫ ОФИЦИАНТА
+  // 🔥 ДОБАВЛЕНЫ ПОИСК И КАТЕГОРИИ ДЛЯ КАССЫ ОФИЦИАНТА
   const [waiterPosSearch, setWaiterPosSearch] = useState('');
   const [waiterPosCategory, setWaiterPosCategory] = useState('all');
   
@@ -47,7 +47,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [cashierTab, setCashierTab] = useState('orders'); 
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
-  // 🔥 ПОИСК И КАТЕГОРИИ ДЛЯ ТЕРМИНАЛА КАССИРА
+  // 🔥 ДОБАВЛЕНЫ ПОИСК И КАТЕГОРИИ ДЛЯ КАССИРА
   const [cashierPosSearch, setCashierPosSearch] = useState('');
   const [cashierPosCategory, setCashierPosCategory] = useState('all');
 
@@ -232,12 +232,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     sendOrderToPaloma(palomaPayload)
       .then(() => console.log('✅ Заказ официанта отправлен в Paloma'))
       .catch(err => console.error('❌ Ошибка отправки заказа официанта:', err));
-    
-    // Сброс фильтров и корзины
-    setShowPosModal(false); 
-    setPosCart({}); 
-    setWaiterPosSearch(''); 
-    setWaiterPosCategory('all');
+    setShowPosModal(false); setPosCart({}); setWaiterPosSearch(''); setWaiterPosCategory('all');
   };
 
   const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }));
@@ -278,11 +273,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     sendOrderToPaloma(palomaPayload)
       .then(() => console.log('✅ Заказ кассира отправлен в Paloma'))
       .catch(err => console.error('❌ Ошибка отправки заказа кассира:', err));
-    
-    // Сброс фильтров и корзины
-    setCashierCart({}); 
-    setCashierPosSearch(''); 
-    setCashierPosCategory('all');
+    setCashierCart({}); setCashierPosSearch(''); setCashierPosCategory('all');
   };
 
   const applySeniorDiscount = () => {
@@ -824,6 +815,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                                  <p style={{margin: 0, fontSize: '12px', color: '#111827'}}>{bookingCust?.name || 'Гость'}<br/>{t.bookedBy}</p>
                                </div>
                             )}
+                            {t.status !== 'free' && (
+                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Освободить стол</button>
+                            )}
                          </div>
                        )
                     })}
@@ -858,7 +852,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                       <p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p>
                       <p style={{margin: '2px 0 0 0', color: '#6b7280', fontSize: '13px'}}>{item.price} ₸</p>
                    </div>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => removeFromCashierCart(item.id)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#f9fafb', color: '#111827', fontWeight: 'bold', fontSize: '16px' }}>-</button><span style={{fontWeight: '900', color: '#111827', fontSize: '16px'}}>{(cashierCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToCashierCart(item)} style={{ padding: '6px 12px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px' }}>+</button></div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => removeFromCashierCart(item.id)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827', fontWeight: 'bold', fontSize: '16px' }}>-</button><span style={{fontWeight: '900', color: '#111827', fontSize: '16px'}}>{(cashierCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToCashierCart(item)} style={{ padding: '6px 12px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px' }}>+</button></div>
                 </div>
               ))}
               {filteredCashierPosMenu.length === 0 && <p style={{textAlign: 'center', color: '#6b7280', marginTop: '20px'}}>Блюда не найдены</p>}
@@ -1225,9 +1219,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               </button>
             </div>
             
-            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Нажмите «Синхронизировать», чтобы подтянуть только активные блюда с реальными ценами из Paloma365. Категории создадутся автоматически на основе папок в кассе!</p>
-            
-            {/* 🔥 КНОПКИ КАТЕГОРИЙ ТЕПЕРЬ ДИНАМИЧЕСКИЕ ИЗ ПАЛОМЫ */}
+            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Внимание: Ручное редактирование отключено. Все стоп-листы и позиции автоматически затягиваются из кассы Paloma365 при нажатии на кнопку "Синхронизировать".</p>
             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
               <button onClick={() => setAdminMenuCategory('all')} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === 'all' ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === 'all' ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>🍽️ Все</button>
               {(categories || []).map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}

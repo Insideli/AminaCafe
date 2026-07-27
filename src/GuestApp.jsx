@@ -1,10 +1,12 @@
 // GuestApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
-import { fetchPalomaMenu } from './paloma.js'; // 🔥 ИМПОРТ ДЛЯ РАБОТЫ С МЕНЮ ПАЛОМЫ
+import { fetchPalomaMenu } from './paloma.js'; 
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
+  // 🔥 ТЕПЕРЬ ГОСТИ ТОЖЕ ВИДЯТ ДИНАМИЧЕСКИЕ КАТЕГОРИИ ИЗ ПАЛОМЫ
+  const [categories, setCategories] = useLocalStorage('amina_categories_v12', CATEGORIES); 
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
   const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
@@ -49,7 +51,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
 
-  // 🔥 ТЕСТОВАЯ ЗАГРУЗКА МЕНЮ ИЗ ПАЛОМЫ ДЛЯ ПРОВЕРКИ В КОНСОЛИ
   useEffect(() => {
     fetchPalomaMenu()
       .then(data => {
@@ -75,6 +76,25 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     orderHistory: lang === 'ru' ? 'История заказов' : 'Тапсырыстар тарихы',
     noOrders: lang === 'ru' ? 'У вас пока нет заказов.' : 'Сізде әзірге тапсырыстар жоқ.'
   };
+
+  // 🔥 УМНЫЙ ФИЛЬТР КАТЕГОРИЙ ДЛЯ ГОСТЕЙ (СКРЫВАЕМ МУСОР И АЛКОГОЛЬ ПРИ ДОСТАВКЕ)
+  const hiddenGuestKeywords = ['посуд', 'упаковк', 'доп', 'сироп', 'служебн', 'хоз', 'без групп', 'расход', 'обслуживан'];
+  const alcoholKeywords = ['бар', 'алког', 'вино', 'водка', 'пиво', 'виски', 'коньяк', 'шот'];
+  
+  const visibleCategories = (categories || []).filter(cat => {
+     if (!cat || !cat.name) return false;
+     const lowerName = cat.name.toLowerCase();
+     if (hiddenGuestKeywords.some(kw => lowerName.includes(kw))) return false;
+     if (orderType === 'delivery' && alcoholKeywords.some(kw => lowerName.includes(kw))) return false;
+     return true;
+  });
+
+  const visibleCatIds = visibleCategories.map(c => c.id);
+  const displayedMenu = (menu || []).filter(m => {
+     if (selectedCategory !== 'all' && m.category !== selectedCategory) return false;
+     if (selectedCategory === 'all' && !visibleCatIds.includes(m.category)) return false; 
+     return true;
+  });
 
   useEffect(() => {
     if (currentUser.isAnonymous) return;
@@ -310,10 +330,23 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const handlePayClick = () => {
     if (cartItemsArray.length === 0 && !isPreOrderFlow) return alert("Выберите блюда!");
+    
+    // 🔥 БЛОКИРОВКА АЛКОГОЛЯ ПРИ ДОСТАВКЕ
     if (orderType === 'delivery') {
        if (!address.street) return alert("Укажите адрес доставки или используйте геоданные!");
        if (!address.phone) return alert("Укажите номер телефона для связи с курьером!");
+       
+       const hasAlcohol = cartItemsArray.some(item => {
+          const cat = (categories || []).find(c => c.id === item.category);
+          if (!cat) return false;
+          return alcoholKeywords.some(kw => cat.name.toLowerCase().includes(kw));
+       });
+       
+       if (hasAlcohol) {
+           return alert("К сожалению, доставка алкогольных напитков запрещена. Пожалуйста, удалите их из корзины для оформления доставки.");
+       }
     }
+    
     if (orderType === 'in_hall' && !activeTable) return alert(lang === 'ru' ? 'Оплата в зале доступна только при заказе за столиком в заведении!' : 'Залда төлеу тек залда отырғанда ғана мүмкін!');
 
     if (orderType === 'in_hall') {
@@ -389,7 +422,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
      alert('Спасибо за ваш отзыв о кафе!');
   };
 
-  const displayedMenu = selectedCategory === 'all' ? (menu || []) : (menu || []).filter(m => m.category === selectedCategory);
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
   const availableWaitersList = Object.entries(roles || {}).filter(([p, data]) => data.role === 'waiter' && data.onShift);
@@ -908,7 +940,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       <div className={`sidebar-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}></div>
       <div className={`categories-sidebar ${isMenuOpen ? 'open' : ''}`}>
         <button className="close-sidebar-btn" onClick={() => setIsMenuOpen(false)}><span>📂 {t.cats}</span> <span>✕</span></button>
-        {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => { setSelectedCategory(cat.id); setIsMenuOpen(false); }} className={`cat-button ${selectedCategory === cat.id ? 'active' : 'inactive'}`}><span className="icon">{cat.icon}</span><span className="name">{cat.name}</span></button>))}
+        <button onClick={() => { setSelectedCategory('all'); setIsMenuOpen(false); }} className={`cat-button ${selectedCategory === 'all' ? 'active' : 'inactive'}`}><span className="icon">🍽️</span><span className="name">Все папки</span></button>
+        {visibleCategories.map(cat => (<button key={cat.id} onClick={() => { setSelectedCategory(cat.id); setIsMenuOpen(false); }} className={`cat-button ${selectedCategory === cat.id ? 'active' : 'inactive'}`}><span className="icon">{cat.icon}</span><span className="name">{cat.name}</span></button>))}
       </div>
 
       <header className="top-header">
@@ -938,34 +971,55 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
           <div className="menu-layout">
             <div className="desktop-sidebar">
               <h3 style={{margin: '0 0 10px 0', fontSize: '16px', color: 'var(--text)'}}>{t.cats}</h3>
-              {CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setSelectedCategory(cat.id)} className={`cat-button ${selectedCategory === cat.id ? 'active' : 'inactive'}`}><span className="icon">{cat.icon}</span><span className="name">{cat.name}</span></button>))}
+              <button onClick={() => setSelectedCategory('all')} className={`cat-button ${selectedCategory === 'all' ? 'active' : 'inactive'}`}><span className="icon">🍽️</span><span className="name">Все папки</span></button>
+              {visibleCategories.map(cat => (<button key={cat.id} onClick={() => setSelectedCategory(cat.id)} className={`cat-button ${selectedCategory === cat.id ? 'active' : 'inactive'}`}><span className="icon">{cat.icon}</span><span className="name">{cat.name}</span></button>))}
             </div>
             <div className="content-area">
               <button className="hamburger-menu-trigger" onClick={() => setIsMenuOpen(true)}><span>☰</span> {t.cats}</button>
               <div className="stories-row">{STORIES.map(story => (<div key={story.id} className="story-item"><div className="story-circle" style={{ background: story.color }}>{story.emoji}</div><span style={{ fontSize: '11px', fontWeight: 'bold', color: '#111827' }}>{story.title}</span></div>))}</div>
               
-              <div className="food-list">
-                {displayedMenu.map(item => (
-                  <div key={item.id} className="food-card" style={{ opacity: item.isStop ? 0.6 : 1 }}>
-                    <div className="food-pic" style={{ filter: item.isStop ? 'grayscale(1)' : 'none' }}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover'}}/> : item.img}</div>
-                    <div className="food-info">
-                      <h3 className="food-name" style={{textDecoration: item.isStop ? 'line-through' : 'none', color: '#111827'}}>{item.name}</h3>
-                      <p className="food-ingr">{item.ingredients}</p>
-                      {item.isStop ? <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '12px' }}>Стоп: {item.stopReason}</span> : <span className="food-price">{item.price} ₸</span>}
-                    </div>
-                    
-                    {cart[item.id] ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', borderRadius: '12px', padding: '4px', flexShrink: 0 }}>
-                        <button onClick={() => removeFromCart(item.id)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#fff', color: '#111827', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>-</button>
-                        <span style={{ fontWeight: '900', fontSize: '14px', minWidth: '16px', textAlign: 'center', color: '#111827' }}>{cart[item.id].quantity}</span>
-                        <button onClick={() => addToCart(item)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>+</button>
-                      </div>
-                    ) : (
-                      <button disabled={item.isStop} onClick={() => addToCart(item)} className="food-add" style={{ backgroundColor: item.isStop ? '#d1d5db' : '#111827' }}>+</button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              {/* 🔥 УМНОЕ МЕНЮ С ПАПКАМИ */}
+              {selectedCategory === 'all' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '15px' }}>
+                  {visibleCategories.map(cat => (
+                     <div key={cat.id} onClick={() => { setSelectedCategory(cat.id); window.scrollTo(0,0); }} style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '25px 15px', textAlign: 'center', cursor: 'pointer', border: '1px solid #e5e7eb', boxShadow: '0 4px 10px rgba(0,0,0,0.03)' }}>
+                       <div style={{ fontSize: '45px', marginBottom: '15px' }}>{cat.icon}</div>
+                       <p style={{ margin: 0, fontWeight: '900', color: '#111827', fontSize: '15px', lineHeight: '1.2' }}>{cat.name}</p>
+                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px' }}>
+                     <button onClick={() => setSelectedCategory('all')} style={{ background: '#fff', border: '1px solid #e5e7eb', padding: '12px 20px', borderRadius: '14px', fontWeight: '900', color: '#111827', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>⬅ Назад к папкам</button>
+                     <h2 style={{ margin: 0, fontSize: '20px', color: '#111827', fontWeight: '900' }}>{visibleCategories.find(c => c.id === selectedCategory)?.icon} {visibleCategories.find(c => c.id === selectedCategory)?.name}</h2>
+                   </div>
+                   
+                   <div className="food-list">
+                     {displayedMenu.map(item => (
+                       <div key={item.id} className="food-card" style={{ opacity: item.isStop ? 0.6 : 1 }}>
+                          <div className="food-pic" style={{ filter: item.isStop ? 'grayscale(1)' : 'none' }}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '100%', height: '100%', borderRadius: '12px', objectFit: 'cover'}}/> : <span style={{fontSize: '24px'}}>{categories.find(c => c.id === item.category)?.icon || '🍲'}</span>}</div>
+                          <div className="food-info">
+                            <h3 className="food-name" style={{textDecoration: item.isStop ? 'line-through' : 'none', color: '#111827'}}>{item.name}</h3>
+                            <p className="food-ingr">{item.ingredients}</p>
+                            {item.isStop ? <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '12px' }}>Стоп-лист</span> : <span className="food-price">{item.price} ₸</span>}
+                          </div>
+                          
+                          {cart[item.id] ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f3f4f6', borderRadius: '12px', padding: '4px', flexShrink: 0 }}>
+                              <button onClick={() => removeFromCart(item.id)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#fff', color: '#111827', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>-</button>
+                              <span style={{ fontWeight: '900', fontSize: '14px', minWidth: '16px', textAlign: 'center', color: '#111827' }}>{cart[item.id].quantity}</span>
+                              <button onClick={() => addToCart(item)} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#111827', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>+</button>
+                            </div>
+                          ) : (
+                            <button disabled={item.isStop} onClick={() => addToCart(item)} className="food-add" style={{ backgroundColor: item.isStop ? '#d1d5db' : '#111827' }}>+</button>
+                          )}
+                        </div>
+                     ))}
+                     {displayedMenu.length === 0 && <p style={{textAlign:'center', color:'#6b7280', padding: '20px'}}>В этой категории пока нет блюд.</p>}
+                   </div>
+                </div>
+              )}
             </div>
           </div>
         )}

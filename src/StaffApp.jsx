@@ -5,7 +5,7 @@ import { sendOrderToPaloma, buildPalomaOrder, fetchPalomaMenu } from './paloma.j
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
-  const [categories, setCategories] = useLocalStorage('amina_categories_v12', DEFAULT_CATEGORIES); // 🔥 ТЕПЕРЬ КАТЕГОРИИ ДИНАМИЧЕСКИЕ!
+  const [categories, setCategories] = useLocalStorage('amina_categories_v12', DEFAULT_CATEGORIES); 
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
   const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
@@ -32,6 +32,10 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
   const [posCart, setPosCart] = useState({});
+  // 🔥 ПОИСК И КАТЕГОРИИ ДЛЯ КАССЫ ОФИЦИАНТА
+  const [waiterPosSearch, setWaiterPosSearch] = useState('');
+  const [waiterPosCategory, setWaiterPosCategory] = useState('all');
+  
   const [selectedTableGroup, setSelectedTableGroup] = useState('all'); 
   const [reviewFilter, setReviewFilter] = useState('all');
 
@@ -43,6 +47,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [cashierTab, setCashierTab] = useState('orders'); 
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
+  // 🔥 ПОИСК И КАТЕГОРИИ ДЛЯ ТЕРМИНАЛА КАССИРА
+  const [cashierPosSearch, setCashierPosSearch] = useState('');
+  const [cashierPosCategory, setCashierPosCategory] = useState('all');
 
   const tableGroupsList = ['all', 'Белый зал', 'Красный зал', 'Кальянный зал', 'Летник', 'Тапчаны', 'Кабинки'];
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
@@ -85,7 +92,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const changeOrderStatus = (id, status, payMethod = null) => setOrders(prev => (prev || []).map(o => o.id === id ? { ...o, status, payMethod: payMethod || o.payMethod } : o));
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
 
-  // 🔥 СИНХРОНИЗАЦИЯ С ПАЛОМОЙ 1 В 1 (КАТЕГОРИИ СОЗДАЮТСЯ АВТОМАТИЧЕСКИ ИЗ ПАПОК)
   const handleSyncPaloma = async () => {
     try {
       alert('🔄 Начинаем загрузку меню и категорий из Paloma... Пожалуйста, подождите.');
@@ -96,7 +102,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       if (data && data.item_groups) {
         data.item_groups.forEach(group => {
           const groupName = group.name || '';
-          const catId = 'paloma_' + group.object_id; // Уникальный ID категории как в Паломе
+          const catId = 'paloma_' + group.object_id;
           let hasActiveItems = false;
 
           if (group.items && Array.isArray(group.items)) {
@@ -117,7 +123,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             });
           }
 
-          // Если в папке Паломы есть хоть одно активное блюдо, создаем категорию на сайте!
           if (hasActiveItems) {
              let icon = '🍽️';
              const lower = groupName.toLowerCase();
@@ -145,8 +150,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       }
 
       if (newMenu.length > 0) {
-        setCategories(newCategories); // Сохраняем новые папки
-        setMenu(newMenu); // Сохраняем меню
+        setCategories(newCategories);
+        setMenu(newMenu);
         alert(`✅ Успех! Загружено ${newCategories.length} категорий и ${newMenu.length} активных блюд прямо из Paloma365!`);
       } else {
         alert('❌ Не удалось найти блюда в ответе от Paloma. Возможно меню пустое.');
@@ -227,7 +232,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     sendOrderToPaloma(palomaPayload)
       .then(() => console.log('✅ Заказ официанта отправлен в Paloma'))
       .catch(err => console.error('❌ Ошибка отправки заказа официанта:', err));
-    setShowPosModal(false); setPosCart({});
+    
+    // Сброс фильтров и корзины
+    setShowPosModal(false); 
+    setPosCart({}); 
+    setWaiterPosSearch(''); 
+    setWaiterPosCategory('all');
   };
 
   const addToCashierCart = (item) => setCashierCart(prev => ({ ...prev, [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 } }));
@@ -268,7 +278,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     sendOrderToPaloma(palomaPayload)
       .then(() => console.log('✅ Заказ кассира отправлен в Paloma'))
       .catch(err => console.error('❌ Ошибка отправки заказа кассира:', err));
-    setCashierCart({});
+    
+    // Сброс фильтров и корзины
+    setCashierCart({}); 
+    setCashierPosSearch(''); 
+    setCashierPosCategory('all');
   };
 
   const applySeniorDiscount = () => {
@@ -277,18 +291,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     if (currentTotal <= 0) return;
     const discountAmount = Math.round(currentTotal * 0.1);
     setPosCart(prev => ({ ...prev, 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
-  };
-
-  const renderTextWithLinks = (text) => {
-    if (!text) return null; const parts = text.split(/(https?:\/\/[^\s]+)/g);
-    return parts.map((part, i) => part.match(/https?:\/\/[^\s]+/) ? <a key={i} href={part} target="_blank" rel="noreferrer" style={{color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold'}}>📍 Открыть карту</a> : <span key={i}>{part}</span>);
-  };
-
-  const getEvictionTime = (timeStr) => {
-    if (!timeStr) return '';
-    const [h, m] = timeStr.split(':').map(Number);
-    const d = new Date(); d.setHours(h, m - 30, 0, 0);
-    return d.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
   };
 
   const validOrders = (orders || []).filter(o => o.status !== 'rejected' && o.status !== 'declined' && o.status !== 'transfer_pending' && o.status !== 'waiter_pending');
@@ -370,23 +372,58 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   };
 
   const renderWaiterPosModal = () => {
-    if (!showPosModal) return null; const table = (tables || []).find(t => t.id === posTableId); const posTotal = Object.values(posCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    if (!showPosModal) return null; 
+    const table = (tables || []).find(t => t.id === posTableId); 
+    const posTotal = Object.values(posCart || {}).reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
+    
+    // 🔥 ФИЛЬТР МЕНЮ ДЛЯ КАССЫ ОФИЦИАНТА (ПОИСК И КАТЕГОРИИ)
+    const filteredPosMenu = (menu || []).filter(item => {
+      const matchSearch = item.name.toLowerCase().includes(waiterPosSearch.toLowerCase());
+      const matchCat = waiterPosCategory === 'all' || item.category === waiterPosCategory;
+      return matchSearch && matchCat;
+    });
+
     return (
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }} onClick={() => setShowPosModal(false)}>
-         <div style={{ backgroundColor: '#f3f4f6', borderRadius: '24px', width: '100%', maxWidth: '500px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }} onClick={e => e.stopPropagation()}>
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(17, 24, 39, 0.8)', zIndex: 99999, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', backdropFilter: 'blur(5px)' }} onClick={() => { setShowPosModal(false); setWaiterPosSearch(''); setWaiterPosCategory('all'); }}>
+         <div style={{ backgroundColor: '#f3f4f6', borderRadius: '24px', width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }} onClick={e => e.stopPropagation()}>
            <div style={{ padding: '20px', backgroundColor: '#111827', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{margin: 0, fontSize: '18px'}}>📱 Касса: {table?.name}</h2><button onClick={() => setShowPosModal(false)} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
+              <h2 style={{margin: 0, fontSize: '18px'}}>📱 Касса: {table?.name}</h2><button onClick={() => { setShowPosModal(false); setWaiterPosSearch(''); setWaiterPosCategory('all'); }} style={{background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer'}}>✖</button>
            </div>
+           
+           {/* БЛОК ПОИСКА И КАТЕГОРИЙ */}
+           <div style={{ padding: '15px 15px 0 15px', background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+             <input type="text" placeholder="🔍 Поиск блюда (например: Пепперони)..." value={waiterPosSearch} onChange={e => setWaiterPosSearch(e.target.value)} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '16px', boxSizing: 'border-box', background: '#f9fafb', color: '#111827'}} />
+             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px' }}>
+                <button onClick={() => setWaiterPosCategory('all')} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: waiterPosCategory === 'all' ? '#111827' : '#f3f4f6', color: waiterPosCategory === 'all' ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>🍽️ Все</button>
+                {(categories || []).map(cat => (
+                   <button key={cat.id} onClick={() => setWaiterPosCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: waiterPosCategory === cat.id ? '#111827' : '#f3f4f6', color: waiterPosCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>
+                ))}
+             </div>
+           </div>
+
            <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
               {currentUser.isSenior && <button onClick={applySeniorDiscount} style={{width: '100%', padding: '10px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', marginBottom: '15px', cursor: 'pointer'}}>🎁 Применить скидку -10%</button>}
-              {(menu || []).map(item => (
+              {filteredPosMenu.map(item => (
                 <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
-                   <div style={{ flex: 1, paddingRight: '10px' }}><div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>{item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '30px', height: '30px', borderRadius: '8px', objectFit: 'cover'}}/> : <span>{item.img}</span>}<p style={{margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#111827'}}>{item.name}</p></div><p style={{margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px'}}>{item.price} ₸</p></div>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}><button onClick={() => removeFromPosCart(item.id)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827' }}>-</button><span style={{fontWeight: 'bold', fontSize: '16px', color: '#111827'}}>{(posCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToPosCart(item)} style={{ padding: '8px 15px', borderRadius: '10px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff' }}>+</button></div>
+                   <div style={{ flex: 1, paddingRight: '10px' }}>
+                     <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                        {item.imgUrl ? <img src={item.imgUrl} alt={item.name} style={{width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover'}}/> : <span style={{fontSize: '24px'}}>{categories.find(c => c.id === item.category)?.icon || '🍲'}</span>}
+                        <div>
+                          <p style={{margin: 0, fontWeight: 'bold', fontSize: '14px', color: '#111827'}}>{item.name}</p>
+                          <p style={{margin: '2px 0 0 0', fontSize: '11px', color: '#6b7280'}}>Категория: {categories.find(c => c.id === item.category)?.name || 'Неизвестно'}</p>
+                        </div>
+                     </div>
+                     <p style={{margin: '8px 0 0 0', color: '#ea580c', fontSize: '14px', fontWeight: 'bold'}}>{item.price} ₸</p>
+                   </div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexShrink: 0 }}><button onClick={() => removeFromPosCart(item.id)} style={{ padding: '8px 15px', borderRadius: '10px', border: '1px solid #e5e7eb', background: '#f9fafb', color: '#111827', fontWeight: 'bold', fontSize: '16px' }}>-</button><span style={{fontWeight: '900', fontSize: '16px', color: '#111827'}}>{(posCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToPosCart(item)} style={{ padding: '8px 15px', borderRadius: '10px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px' }}>+</button></div>
                 </div>
               ))}
+              {filteredPosMenu.length === 0 && <p style={{textAlign: 'center', color: '#6b7280', marginTop: '20px'}}>Блюда не найдены</p>}
            </div>
-           <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb' }}><p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '20px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого чек:</span> <span>{posTotal} ₸</span></p><button onClick={submitPosOrder} style={{ width: '100%', padding: '18px', borderRadius: '14px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '16px' }}>Отправить на кухню</button></div>
+           <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '1px solid #e5e7eb', zIndex: 10 }}>
+               <p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '20px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого чек:</span> <span>{posTotal} ₸</span></p>
+               <button onClick={submitPosOrder} style={{ width: '100%', padding: '18px', borderRadius: '14px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 10px rgba(16,185,129,0.2)' }}>Отправить на кухню</button>
+           </div>
          </div>
       </div>
     );
@@ -409,7 +446,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.6 : 1 }}>
               <div style={{flex: 1}}>
                 <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                   {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover'}} alt="" /> : <span style={{fontSize:'24px'}}>{item.img}</span>}
+                   {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'10px', objectFit:'cover'}} alt="" /> : <span style={{fontSize:'24px'}}>{categories.find(c => c.id === item.category)?.icon || '🍲'}</span>}
                    <div>
                      <p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p>
                      <p style={{margin: '2px 0 0 0', fontSize: '14px', color: '#ea580c', fontWeight: 'bold'}}>{item.price} ₸</p>
@@ -694,6 +731,13 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         }
     });
 
+    // 🔥 ФИЛЬТР МЕНЮ ДЛЯ ТЕРМИНАЛА КАССИРА (ПОИСК И КАТЕГОРИИ)
+    const filteredCashierPosMenu = (menu || []).filter(item => {
+      const matchSearch = item.name.toLowerCase().includes(cashierPosSearch.toLowerCase());
+      const matchCat = cashierPosCategory === 'all' || item.category === cashierPosCategory;
+      return matchSearch && matchCat;
+    });
+
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
         {renderInfoModal()}
@@ -780,9 +824,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                                  <p style={{margin: 0, fontSize: '12px', color: '#111827'}}>{bookingCust?.name || 'Гость'}<br/>{t.bookedBy}</p>
                                </div>
                             )}
-                            {t.status !== 'free' && (
-                               <button onClick={() => setTables(prev => (prev || []).map(tab => tab.id === t.id ? { ...tab, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null, isCallingForBill: false } : tab))} style={{ width: '100%', marginTop: '15px', padding: '8px', background: '#f3f4f6', color: '#ef4444', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' }}>Освободить стол</button>
-                            )}
                          </div>
                        )
                     })}
@@ -799,13 +840,28 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                <button onClick={() => setCashierOrderType('takeaway')} style={{flex:1, minWidth: 0, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', background: cashierOrderType === 'takeaway' ? '#111827' : '#fff', color: cashierOrderType === 'takeaway' ? '#fff' : '#111827', fontWeight: 'bold', cursor: 'pointer'}}>🛍 Навынос</button>
                <button onClick={() => setCashierOrderType('delivery')} style={{flex:1, minWidth: 0, padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', background: cashierOrderType === 'delivery' ? '#111827' : '#fff', color: cashierOrderType === 'delivery' ? '#fff' : '#111827', fontWeight: 'bold', cursor: 'pointer'}}>🛵 Доставка</button>
             </div>
+            
+            <div style={{ padding: '0 15px' }}>
+               <input type="text" placeholder="🔍 Поиск блюда (например: Бургер)..." value={cashierPosSearch} onChange={e => setCashierPosSearch(e.target.value)} style={{width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #d1d5db', marginBottom: '10px', fontSize: '16px', boxSizing: 'border-box', background: '#f9fafb', color: '#111827'}} />
+               <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', borderBottom: '1px solid #e5e7eb' }}>
+                  <button onClick={() => setCashierPosCategory('all')} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: cashierPosCategory === 'all' ? '#111827' : '#f3f4f6', color: cashierPosCategory === 'all' ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>🍽️ Все</button>
+                  {(categories || []).map(cat => (
+                     <button key={cat.id} onClick={() => setCashierPosCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: cashierPosCategory === cat.id ? '#111827' : '#f3f4f6', color: cashierPosCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>
+                  ))}
+               </div>
+            </div>
+
             <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
-              {(menu || []).map(item => (
+              {filteredCashierPosMenu.map(item => (
                 <div key={item.id} style={{ backgroundColor: '#fff', padding: '12px', borderRadius: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: item.isStop ? 0.5 : 1 }}>
-                   <div style={{ flex: 1 }}><p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p><p style={{margin: '2px 0 0 0', color: '#6b7280', fontSize: '13px'}}>{item.price} ₸</p></div>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => removeFromCashierCart(item.id)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: '#111827' }}>-</button><span style={{fontWeight: 'bold', color: '#111827'}}>{(cashierCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToCashierCart(item)} style={{ padding: '6px 12px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff' }}>+</button></div>
+                   <div style={{ flex: 1 }}>
+                      <p style={{margin: 0, fontWeight: 'bold', color: '#111827'}}>{item.name}</p>
+                      <p style={{margin: '2px 0 0 0', color: '#6b7280', fontSize: '13px'}}>{item.price} ₸</p>
+                   </div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><button onClick={() => removeFromCashierCart(item.id)} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#f9fafb', color: '#111827', fontWeight: 'bold', fontSize: '16px' }}>-</button><span style={{fontWeight: '900', color: '#111827', fontSize: '16px'}}>{(cashierCart || {})[item.id]?.quantity || 0}</span><button disabled={item.isStop} onClick={() => addToCashierCart(item)} style={{ padding: '6px 12px', borderRadius: '8px', background: item.isStop ? '#9ca3af' : '#111827', color: '#fff', fontWeight: 'bold', fontSize: '16px' }}>+</button></div>
                 </div>
               ))}
+              {filteredCashierPosMenu.length === 0 && <p style={{textAlign: 'center', color: '#6b7280', marginTop: '20px'}}>Блюда не найдены</p>}
             </div>
             <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '2px solid #e5e7eb' }}>
                <p style={{ margin: '0 0 15px 0', fontWeight: '900', fontSize: '22px', display: 'flex', justifyContent: 'space-between', color: '#111827' }}><span>Итого:</span> <span>{posTotal} ₸</span></p>
@@ -1176,12 +1232,11 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               <button onClick={() => setAdminMenuCategory('all')} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === 'all' ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === 'all' ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>🍽️ Все</button>
               {(categories || []).map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
             </div>
-            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {displayedAdminMenu.map(item => (
                 <div key={item.id} style={{ backgroundColor: '#fff', padding: '15px', borderRadius: '16px', display: 'grid', gridTemplateColumns: '40px 1fr', gap: '10px', alignItems: 'center', border: item.isStop ? '2px solid #dc2626' : '1px solid #e5e7eb', opacity: item.isStop ? 0.6 : 1 }}>
                   <div style={{fontSize: '25px', display: 'flex', justifyContent: 'center'}}>
-                    {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : '🍲'}
+                    {item.imgUrl ? <img src={item.imgUrl} style={{width:'40px', height:'40px', borderRadius:'8px', objectFit:'cover'}} alt="" /> : <span style={{fontSize: '24px'}}>{categories.find(c => c.id === item.category)?.icon || '🍲'}</span>}
                   </div>
                   <div style={{minWidth: 0}}>
                     <p style={{ margin: 0, fontWeight: 'bold', color: item.isStop ? '#dc2626' : '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</p>

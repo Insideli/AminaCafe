@@ -7,13 +7,6 @@ export async function fetchPalomaMenu() {
   return response.json();
 }
 
-// 🔥 НОВАЯ ФУНКЦИЯ: Запрос стоп-листа
-export async function fetchPalomaStoplist() {
-  const response = await fetch(`${PROXY_URL}?method=stoplist`);
-  if (!response.ok) throw new Error('Не удалось загрузить стоп-лист');
-  return response.json();
-}
-
 export async function sendOrderToPaloma(orderPayload) {
   const response = await fetch(`${PROXY_URL}?method=order`, {
     method: 'POST',

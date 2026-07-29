@@ -1,14 +1,15 @@
 // StaffApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES as DEFAULT_CATEGORIES, INITIAL_TABLES, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
-import { sendOrderToPaloma, buildPalomaOrder, fetchPalomaMenu } from './paloma.js'; 
+import { submitOrderToPaloma, syncPalomaCatalog, testPalomaConnection } from './paloma.js';
+import { createOrderId } from './utils/orderId.js';
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
   const [categories, setCategories] = useLocalStorage('amina_categories_v12', DEFAULT_CATEGORIES); 
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
+  const [roles, setRoles] = useLocalStorage('amina_staff_profiles_v13', INITIAL_ROLES);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
   const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
@@ -18,6 +19,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [supportAdminText, setSupportAdminText] = useState('');
 
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [palomaStatus, setPalomaStatus] = useState({ state: 'idle', message: 'Связь ещё не проверялась' });
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [adminMenuCategory, setAdminMenuCategory] = useState('all');
@@ -25,9 +27,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   
   const [editStaffModal, setEditStaffModal] = useState(false);
   const [editStaffOriginalPhone, setEditStaffOriginalPhone] = useState('');
-  const [editStaffData, setEditStaffData] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', isSenior: false, onShift: true });
+  const [editStaffData, setEditStaffData] = useState({ phone: '', name: '', schedule: '', role: 'waiter', isSenior: false, onShift: true });
 
-  const [newWaiter, setNewWaiter] = useState({ phone: '', name: '', schedule: '', role: 'waiter', password: '', isSenior: false });
+  const [newWaiter, setNewWaiter] = useState({ phone: '', name: '', schedule: '', role: 'waiter', isSenior: false });
   
   const [showPosModal, setShowPosModal] = useState(false); 
   const [posTableId, setPosTableId] = useState(null);
@@ -79,7 +81,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       try {
         if (!e.newValue) return; const parsed = JSON.parse(e.newValue);
         if (e.key === 'amina_orders_v12') setOrders(parsed || []); if (e.key === 'amina_tables_v12') setTables(parsed || []);
-        if (e.key === 'amina_menu_v12') setMenu(parsed || []); if (e.key === 'amina_roles_v12') setRoles(parsed || {});
+        if (e.key === 'amina_menu_v12') setMenu(parsed || []); if (e.key === 'amina_staff_profiles_v13') setRoles(parsed || {});
         if (e.key === 'amina_reviews_v12') setReviews(parsed || []); if (e.key === 'amina_analytics_v12') setAnalytics(parsed || { qr:0, link:0 });
         if (e.key === 'amina_customers_v12') setCustomers(parsed || {});
         if (e.key === 'amina_support_v12') setSupportChat(parsed || []);
@@ -90,82 +92,72 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   }, []);
 
   const changeOrderStatus = (id, status, payMethod = null) => setOrders(prev => (prev || []).map(o => o.id === id ? { ...o, status, payMethod: payMethod || o.payMethod } : o));
+
+  const syncOrderWithPaloma = async (order, sourceLabel) => {
+    try {
+      const result = await submitOrderToPaloma(order);
+      setOrders(prev => (prev || []).map(item => item.id === order.id ? {
+        ...item,
+        palomaSync: {
+          status: 'synced',
+          palomaOrderId: result?.paloma_order_id || null,
+          receiptId: result?.receipt_id || null,
+          syncedAt: new Date().toISOString(),
+        },
+      } : item));
+      console.log(`✅ ${sourceLabel} отправлен в Paloma365`, result);
+    } catch (error) {
+      setOrders(prev => (prev || []).map(item => item.id === order.id ? {
+        ...item,
+        palomaSync: {
+          status: 'failed',
+          error: error.message,
+          failedAt: new Date().toISOString(),
+        },
+      } : item));
+      console.error(`❌ ${sourceLabel} не отправлен в Paloma365:`, error);
+      alert(`⚠️ Заказ сохранён в AminaCafe, но не попал в Paloma365. Причина: ${error.message}`);
+    }
+  };
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
 
-  const handleSyncPaloma = async () => {
+  const handleTestPaloma = async () => {
+    setPalomaStatus({ state: 'loading', message: 'Проверяем соединение…' });
     try {
-      alert('🔄 Начинаем загрузку меню и категорий из Paloma... Пожалуйста, подождите.');
-      const data = await fetchPalomaMenu();
-      let newMenu = [];
-      let newCategories = [];
+      const result = await testPalomaConnection();
+      const pointsCount = Array.isArray(result?.points) ? result.points.length : 0;
+      setPalomaStatus({ state: 'success', message: `Paloma365 доступна. Торговых точек: ${pointsCount}` });
+    } catch (error) {
+      setPalomaStatus({ state: 'error', message: error.message });
+    }
+  };
 
-      if (data && data.item_groups) {
-        data.item_groups.forEach(group => {
-          const groupName = group.name || '';
-          const catId = 'paloma_' + group.object_id;
-          let hasActiveItems = false;
+  const handleSyncPaloma = async () => {
+    setPalomaStatus({ state: 'loading', message: 'Загружаем меню и стоп-лист…' });
+    try {
+      const result = await syncPalomaCatalog();
 
-          if (group.items && Array.isArray(group.items)) {
-            group.items.forEach(item => {
-              if (item.mark_deleted !== 1 && item.i_useInMenu === 1 && Number(item.price) > 0) {
-                hasActiveItems = true;
-                newMenu.push({
-                  id: item.object_id.toString(),
-                  paloma_id: item.object_id,
-                  name: item.name,
-                  price: Number(item.price) || 0,
-                  ingredients: item.description || '',
-                  category: catId,
-                  isStop: false, 
-                  imgUrl: item.image || ''
-                });
-              }
-            });
-          }
-
-          if (hasActiveItems) {
-             let icon = '🍽️';
-             const lower = groupName.toLowerCase();
-             if (lower.includes('салат')) icon = '🥗';
-             else if (lower.includes('суп') || lower.includes('первое')) icon = '🥣';
-             else if (lower.includes('пицца')) icon = '🍕';
-             else if (lower.includes('фаст') || lower.includes('бургер') || lower.includes('фри')) icon = '🍔';
-             else if (lower.includes('напит') || lower.includes('чай') || lower.includes('кофе') || lower.includes('сок') || lower.includes('лимонад') || lower.includes('смузи')) icon = '🧃';
-             else if (lower.includes('бар') || lower.includes('алког') || lower.includes('пиво') || lower.includes('вино') || lower.includes('шот') || lower.includes('виски') || lower.includes('водка')) icon = '🍻';
-             else if (lower.includes('десерт') || lower.includes('сладк') || lower.includes('морож')) icon = '🍰';
-             else if (lower.includes('горяч') || lower.includes('мясо') || lower.includes('шашлык') || lower.includes('птиц')) icon = '🥩';
-             else if (lower.includes('закуск') || lower.includes('пивн')) icon = '🥨';
-             else if (lower.includes('хлеб') || lower.includes('выпеч')) icon = '🥐';
-             else if (lower.includes('гарнир')) icon = '🍟';
-             else if (lower.includes('соус')) icon = '🫙';
-             else if (lower.includes('акци')) icon = '🔥';
-
-             newCategories.push({
-                id: catId,
-                name: groupName,
-                icon: icon
-             });
-          }
-        });
+      if (result.menu.length === 0) {
+        setPalomaStatus({ state: 'error', message: 'Активные блюда с ценой не найдены' });
+        return alert('❌ Paloma365 ответила, но активных блюд с ценой не найдено. Проверьте выбранное меню во внешнем сервисе Tester.');
       }
 
-      if (newMenu.length > 0) {
-        setCategories(newCategories);
-        setMenu(newMenu);
-        alert(`✅ Успех! Загружено ${newCategories.length} категорий и ${newMenu.length} активных блюд прямо из Paloma365!`);
-      } else {
-        alert('❌ Не удалось найти блюда в ответе от Paloma. Возможно меню пустое.');
-      }
-    } catch (err) {
-      console.error(err);
-      alert('❌ Ошибка при скачивании меню: ' + err.message);
+      setCategories(result.categories);
+      setMenu(result.menu);
+      setPalomaStatus({ state: 'success', message: `${result.menu.length} блюд, стоп-лист: ${result.stopCount}` });
+      alert(`✅ Синхронизация завершена: ${result.categories.length} категорий, ${result.menu.length} блюд, ${result.stopCount} позиций в стоп-листе.`);
+    } catch (error) {
+      console.error('Ошибка синхронизации с Paloma365:', error);
+      setPalomaStatus({ state: 'error', message: error.message });
+      alert(`❌ Не удалось синхронизировать Paloma365: ${error.message}`);
     }
   };
 
   const handleAddWaiter = () => { 
-    if(!newWaiter.phone || !newWaiter.name || !newWaiter.password) return; 
-    setRoles(prev => ({ ...(prev || {}), [newWaiter.phone]: { role: newWaiter.role, name: newWaiter.name, schedule: newWaiter.schedule, onShift: true, password: newWaiter.password, isSenior: newWaiter.role === 'waiter' ? newWaiter.isSenior : false, sessionToken: null }})); 
-    setNewWaiter({ phone: '', name: '', schedule: '', role: 'waiter', password: '', isSenior: false }); 
+    if(!newWaiter.phone || !newWaiter.name) return; 
+    setRoles(prev => ({ ...(prev || {}), [newWaiter.phone]: { role: newWaiter.role, name: newWaiter.name, schedule: newWaiter.schedule, onShift: true, isSenior: newWaiter.role === 'waiter' ? newWaiter.isSenior : false }})); 
+    setNewWaiter({ phone: '', name: '', schedule: '', role: 'waiter', isSenior: false });
+    alert('Профиль сотрудника добавлен. Для входа создайте или обновите его защищённый аккаунт через tools/staff-config.html и переменную STAFF_ACCOUNTS_JSON в Vercel.'); 
   };
   
   const openEditStaffModal = (phone, data) => {
@@ -175,15 +167,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   };
 
   const handleSaveStaff = () => {
-    if(!editStaffData.phone || !editStaffData.name || !editStaffData.password) return;
+    if(!editStaffData.phone || !editStaffData.name) return;
     setRoles(prev => {
       const updated = { ...(prev || {}) };
       if (editStaffOriginalPhone !== editStaffData.phone) { delete updated[editStaffOriginalPhone]; }
       updated[editStaffData.phone] = { 
          role: editStaffData.role, name: editStaffData.name, schedule: editStaffData.schedule, 
-         onShift: editStaffData.onShift, password: editStaffData.password, 
-         isSenior: editStaffData.role === 'waiter' ? editStaffData.isSenior : false, 
-         sessionToken: updated[editStaffOriginalPhone]?.sessionToken || null 
+         onShift: editStaffData.onShift,
+         isSenior: editStaffData.role === 'waiter' ? editStaffData.isSenior : false,
+         kaspi: updated[editStaffOriginalPhone]?.kaspi || null
       };
       return updated;
     });
@@ -204,7 +196,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { 
-      id: `ORD-${Math.floor(Math.random() * 10000)}`, 
+      id: createOrderId('ORD'), 
       phone: 'waiter-' + currentUser.phone,
       customerName: currentUser.name, 
       tableId: table?.id, 
@@ -228,10 +220,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     setOrders(prev => [newOrder, ...(prev || [])]); 
     setTables(prev => (prev || []).map(t => t.id === table?.id ? { ...t, status: 'occupied', bookedBy: t.bookedBy, bookedTime: t.bookedTime, servedBy: currentUser.phone, isCalling: false, calledWaiter: null } : t));
     
-    const palomaPayload = buildPalomaOrder(newOrder);
-    sendOrderToPaloma(palomaPayload)
-      .then(() => console.log('✅ Заказ официанта отправлен в Paloma'))
-      .catch(err => console.error('❌ Ошибка отправки заказа официанта:', err));
+    void syncOrderWithPaloma(newOrder, 'Заказ официанта');
     setShowPosModal(false); setPosCart({}); setWaiterPosSearch(''); setWaiterPosCategory('all');
   };
 
@@ -246,7 +235,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { 
-      id: `ORD-${Math.floor(Math.random() * 10000)}`, 
+      id: createOrderId('ORD'), 
       phone: 'cashier-' + currentUser.phone,
       customerName: currentUser.name, 
       tableId: 'cashier', 
@@ -269,10 +258,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     };
     setOrders(prev => [newOrder, ...(prev || [])]); 
     
-    const palomaPayload = buildPalomaOrder(newOrder);
-    sendOrderToPaloma(palomaPayload)
-      .then(() => console.log('✅ Заказ кассира отправлен в Paloma'))
-      .catch(err => console.error('❌ Ошибка отправки заказа кассира:', err));
+    void syncOrderWithPaloma(newOrder, 'Заказ кассира');
     setCashierCart({}); setCashierPosSearch(''); setCashierPosCategory('all');
   };
 
@@ -348,10 +334,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                        if (o.orderType === 'booking_deposit') {
                            setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
                        } else {
-                           const palomaPayload = buildPalomaOrder({ ...o, customerName: guestInfo.name });
-                           sendOrderToPaloma(palomaPayload)
-                             .then(() => console.log('✅ Заказ подтверждён и отправлен в Paloma'))
-                             .catch(err => console.error('❌ Ошибка отправки подтверждённого заказа:', err));
+                           void syncOrderWithPaloma({ ...o, customerName: guestInfo.name, payMethod: 'kaspi' }, 'Подтверждённый заказ гостя');
                        }
                    }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
                    <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Деньги не поступили</button>
@@ -498,30 +481,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       const serviceFee = Math.round(subtotal * 0.15);
       const grandTotal = subtotal + serviceFee;
 
-      const receiptOrder = {
-        id: `REC-${Date.now()}`,
-        phone: 'waiter-' + currentUser.phone,
-        customerName: currentUser.name,
-        tableId: table.id,
-        tableName: table.name,
-        cartItems: allItems,
-        itemsText: allItems.map(i => `${i.name} (x${i.quantity})`).join(', '),
-        subtotal: subtotal,
-        serviceFee: serviceFee,
-        total: grandTotal,
-        orderType: 'in_hall',
-        payMethod: 'cash',
-        deliveryAddress: '',
-        date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-        status: 'new', 
-        waiterPhone: currentUser.phone,
-        waiterName: currentUser.name,
-      };
-
-      const palomaPayload = buildPalomaOrder(receiptOrder);
-      sendOrderToPaloma(palomaPayload)
-        .then(() => console.log('✅ Чек закрыт и отправлен в Paloma для печати'))
-        .catch(err => console.error('❌ Ошибка печати чека:', err));
+      // Заказы уже отправлены в Paloma365 при создании/подтверждении.
+      // Повторная отправка при закрытии стола создавала бы дубликат.
 
       setOrders(prev => (prev || []).map(o => {
         if (o.tableId === tableId && o.status !== 'delivered' && o.status !== 'rejected') {
@@ -763,21 +724,13 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                       <button onClick={() => { 
                          setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
                          if(orderForTable) { 
-                           changeOrderStatus(orderForTable.id, 'delivered', 'kaspi'); 
-                           const palomaPayload = buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name });
-                           sendOrderToPaloma(palomaPayload)
-                             .then(() => console.log('✅ Оплата Kaspi подтверждена, заказ в Paloma'))
-                             .catch(err => console.error('❌ Ошибка отправки Kaspi:', err));
+                           changeOrderStatus(orderForTable.id, 'delivered', 'kaspi');
                          } 
                       }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
                       <button onClick={() => { 
                          setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
                          if(orderForTable) { 
-                           changeOrderStatus(orderForTable.id, 'delivered', 'cash'); 
-                           const palomaPayload = buildPalomaOrder({ ...orderForTable, customerName: guestInfo.name });
-                           sendOrderToPaloma(palomaPayload)
-                             .then(() => console.log('✅ Оплата наличными подтверждена, заказ в Paloma'))
-                             .catch(err => console.error('❌ Ошибка отправки наличными:', err));
+                           changeOrderStatus(orderForTable.id, 'delivered', 'cash');
                          }
                       }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
                     </div>
@@ -948,10 +901,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                      const updatedOrder = {...o, status: 'new', payMethod: 'cash'};
                      changeOrderStatus(o.id, 'new', 'cash'); 
                      setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, servedBy: currentUser.phone } : t)); 
-                     const palomaPayload = buildPalomaOrder({ ...updatedOrder, customerName: currentUser.name });
-                     sendOrderToPaloma(palomaPayload)
-                       .then(() => console.log('✅ Заказ официанта отправлен в Paloma'))
-                       .catch(err => console.error('❌ Ошибка:', err));
+                     void syncOrderWithPaloma({ ...updatedOrder, customerName: currentUser.name }, 'Заказ гостя через официанта');
                   }} style={{width: '100%', padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Оплату принял (Отправить на кухню)</button>
                </div>
             ))}
@@ -959,7 +909,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
           {(tables || []).filter(t => t.isCallingForBill && (t.servedBy === currentUser.phone || currentUser.isSenior)).map(table => {
              const ro = cashPending.find(o => o.tableId === table.id);
-             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) { changeOrderStatus(ro.id, 'delivered'); const palomaPayload = buildPalomaOrder({ ...ro, customerName: 'Гость' }); sendOrderToPaloma(palomaPayload).catch(console.error); } }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
+             return (<div key={`bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '4px solid #dc2626', padding: '20px', borderRadius: '24px', marginBottom: '25px', display: 'flex', flexDirection: 'column', gap: '15px' }}><div><h2 style={{ color: '#991b1b', margin: '0 0 5px 0' }}>💸 СТОЛ ПРОСИТ СЧЕТ</h2><p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: '#111827' }}>{table.name} — К оплате: {ro?.total || '?'} ₸</p></div><button onClick={() => { setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); if(ro) { changeOrderStatus(ro.id, 'delivered'); } }} style={{ padding: '15px', borderRadius: '12px', border: 'none', backgroundColor: '#dc2626', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' }}>✅ Стол рассчитан</button></div>)
           })}
           
           <h2 style={{color: '#111827'}}>Интерактивная карта залов:</h2>
@@ -1071,7 +1021,6 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
               <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
                 <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Имя Фамилия</label><input type="text" value={editStaffData.name} onChange={e => setEditStaffData({...editStaffData, name: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
                 <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Логин (Номер телефона)</label><input type="text" value={editStaffData.phone} onChange={e => setEditStaffData({...editStaffData, phone: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
-                <div><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Пароль</label><input type="text" value={editStaffData.password} onChange={e => setEditStaffData({...editStaffData, password: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}} /></div>
                 
                 <div style={{display: 'flex', gap: '10px'}}>
                   <div style={{flex: 1, minWidth: 0}}><label style={{fontSize:'12px', fontWeight:'bold', color:'#6b7280'}}>Должность</label><select value={editStaffData.role} onChange={e => setEditStaffData({...editStaffData, role: e.target.value})} style={{width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid #d1d5db', boxSizing: 'border-box', color: '#111827'}}><option value="waiter">Официант</option><option value="cashier">Кассир</option></select></div>
@@ -1212,14 +1161,24 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
         {adminTab === 'menu' && (
           <div style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h3 style={{color: '#111827', margin: 0}}>Меню заведения:</h3>
-              <button onClick={handleSyncPaloma} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(16,185,129,0.2)' }}>
-                🔄 Синхронизировать с Paloma
-              </button>
+            <div style={{ marginBottom: '15px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <h3 style={{color: '#111827', margin: 0}}>Меню заведения:</h3>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={handleTestPaloma} disabled={palomaStatus.state === 'loading'} style={{ background: '#fff', color: '#374151', border: '1px solid #d1d5db', padding: '10px 13px', borderRadius: '12px', fontWeight: 'bold', cursor: palomaStatus.state === 'loading' ? 'wait' : 'pointer' }}>
+                    🔌 Проверить связь
+                  </button>
+                  <button onClick={handleSyncPaloma} disabled={palomaStatus.state === 'loading'} style={{ background: '#10b981', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '12px', fontWeight: 'bold', cursor: palomaStatus.state === 'loading' ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(16,185,129,0.2)', opacity: palomaStatus.state === 'loading' ? 0.7 : 1 }}>
+                    🔄 Синхронизировать
+                  </button>
+                </div>
+              </div>
+              <div style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 'bold', background: palomaStatus.state === 'success' ? '#ecfdf5' : palomaStatus.state === 'error' ? '#fef2f2' : palomaStatus.state === 'loading' ? '#eff6ff' : '#f9fafb', color: palomaStatus.state === 'success' ? '#047857' : palomaStatus.state === 'error' ? '#b91c1c' : palomaStatus.state === 'loading' ? '#1d4ed8' : '#6b7280', border: `1px solid ${palomaStatus.state === 'success' ? '#a7f3d0' : palomaStatus.state === 'error' ? '#fecaca' : palomaStatus.state === 'loading' ? '#bfdbfe' : '#e5e7eb'}` }}>
+                {palomaStatus.state === 'success' ? '✅ ' : palomaStatus.state === 'error' ? '❌ ' : palomaStatus.state === 'loading' ? '⏳ ' : 'ℹ️ '}{palomaStatus.message}
+              </div>
             </div>
-            
-            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Внимание: Ручное редактирование отключено. Все стоп-листы и позиции автоматически затягиваются из кассы Paloma365 при нажатии на кнопку "Синхронизировать".</p>
+
+            <p style={{color: '#6b7280', fontSize: '13px', marginBottom: '20px'}}>💡 Ручное редактирование отключено. Меню, цены и стоп-лист загружаются из Paloma365. Гостям показывается последняя успешно сохранённая версия, поэтому временный сбой Paloma не оставит сайт без меню.</p>
             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #d1d5db' }}>
               <button onClick={() => setAdminMenuCategory('all')} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === 'all' ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === 'all' ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>🍽️ Все</button>
               {(categories || []).map(cat => (<button key={cat.id} onClick={() => setAdminMenuCategory(cat.id)} style={{ padding: '8px 15px', borderRadius: '12px', border: 'none', background: adminMenuCategory === cat.id ? '#3b82f6' : '#f3f4f6', color: adminMenuCategory === cat.id ? '#fff' : '#4b5563', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' }}>{cat.icon} {cat.name}</button>))}
@@ -1245,10 +1204,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #8b5cf6' }}>
               <h4 style={{color: '#111827', margin: '0 0 15px 0'}}>➕ Новый сотрудник:</h4>
               <input type="text" placeholder="Имя Фамилия" value={newWaiter.name} onChange={e => setNewWaiter({...newWaiter, name: e.target.value})} style={{ width: '100%', padding: '12px', margin: '0 0 10px 0', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
-              <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
-                 <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
-                 <input type="text" placeholder="Пароль" value={newWaiter.password} onChange={e => setNewWaiter({...newWaiter, password: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
+              <div style={{ marginBottom: '10px' }}>
+                 <input type="tel" placeholder="Логин (номер)" value={newWaiter.phone} onChange={e => setNewWaiter({...newWaiter, phone: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}/>
               </div>
+              <p style={{ margin: '0 0 10px 0', padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', color: '#92400e', fontSize: '12px', lineHeight: 1.5 }}>
+                🔐 Пароли больше не хранятся в сайте или Firestore. Данные для входа создаются локально через <b>tools/staff-config.html</b> и сохраняются только в Vercel.
+              </p>
               <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
                 <select value={newWaiter.role} onChange={e => setNewWaiter({...newWaiter, role: e.target.value})} style={{ flex: 1, minWidth: 0, padding: '12px', borderRadius: '10px', border: '1px solid #ccc', color: '#111827', boxSizing: 'border-box' }}><option value="waiter">Официант</option><option value="cashier">Кассир</option></select>
               </div>
@@ -1274,7 +1235,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                   </div>
                   <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
                      <button onClick={() => openEditStaffModal(phone, data)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: '#f3f4f6', color: '#4b5563', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>✏️ Изменить</button>
-                     <button onClick={() => toggleWaiterShift(phone)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: data.onShift ? '#fee2e2' : '#d1fae5', color: data.onShift ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>{data.onShift ? 'Заблокировать' : 'Разблокировать'}</button>
+                     <button onClick={() => toggleWaiterShift(phone)} style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', backgroundColor: data.onShift ? '#fee2e2' : '#d1fae5', color: data.onShift ? '#dc2626' : '#065f46', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>{data.onShift ? 'Снять со смены' : 'Поставить на смену'}</button>
                   </div>
                 </div>
               </div>

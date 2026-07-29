@@ -12,3 +12,4 @@ build/
 
 # Файлы системы (Mac/Windows)
 .DS_Store
+.vercel/

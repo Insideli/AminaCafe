@@ -1,8 +1,16 @@
 {
-  "rewrites": [
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 15
+    }
+  },
+  "headers": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/paloma.js"
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
     }
   ]
 }

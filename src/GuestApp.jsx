@@ -1,7 +1,7 @@
 // GuestApp.js
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
-import { fetchPalomaMenu } from './paloma.js'; 
+import { createOrderId } from './utils/orderId.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
@@ -10,7 +10,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
   const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
   const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
+  const [roles, setRoles] = useLocalStorage('amina_staff_profiles_v13', INITIAL_ROLES);
   const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []); 
   
   const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
@@ -50,15 +50,6 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [profileReviewText, setProfileReviewText] = useState('');
 
   const [showIOSInstallGuide, setShowIOSInstallGuide] = useState(false);
-
-  useEffect(() => {
-    fetchPalomaMenu()
-      .then(data => {
-        console.log("🔥 МЕНЮ ИЗ ПАЛОМЫ УСПЕШНО СКАЧАНО:");
-        console.log(data);
-      })
-      .catch(err => console.error("❌ Ошибка скачивания меню:", err));
-  }, []);
 
   const t = {
     menu: lang === 'ru' ? 'Меню' : 'Мәзір',
@@ -236,7 +227,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     }
 
     const newOrder = {
-       id: `BKG-${Math.floor(Math.random() * 10000)}`,
+       id: createOrderId('BKG'),
        phone: currentUser.phone,
        customerName: currentUser.name, 
        tableId: preOrderTableId,
@@ -302,7 +293,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
     const fullAddress = orderType === 'delivery' ? `Ул/Гео: ${address.street}, д. ${address.house}, кв. ${address.apt}. Тел: ${address.phone}. Коммент: ${address.comment}` : '';
     
     return { 
-      id: `ORD-${Math.floor(Math.random() * 10000)}`, 
+      id: createOrderId('ORD'), 
       phone: currentUser.phone,
       customerName: currentUser.name || 'Гость', 
       tableId: activeTable?.id || orderType, 
@@ -316,7 +307,8 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       isPreOrder: isPreOrderFlow, 
       bookedTime: isPreOrderFlow ? bookingTime : null, 
       orderType, 
-      deliveryAddress: fullAddress, 
+      deliveryAddress: fullAddress,
+      contactPhone: orderType === 'delivery' ? address.phone : '',
       date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), 
       status: statusToSet, 
       waiterPhone: assignedWaiterPhone, 

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
-import { fetchPalomaMenu } from './paloma.js';
 
 // ТВОИ КЛЮЧИ FIREBASE
 const firebaseConfig = {
@@ -7159,45 +7158,14 @@ export const STATION_MAP = {
 export const INITIAL_CUSTOMERS = { "77075375180": { phone: "77075375180", name: "Або Босс", bonuses: 500, totalSpent: 10000, sessionToken: null } };
 
 export const INITIAL_ROLES = {
-  "001002003": { role: "admin", name: "Директор Эльвира", password: "Админ Амина", onShift: true, schedule: "ПН-ПТ", isSenior: false, sessionToken: null },
-  "02180": { role: "developer", name: "Разработчик (Ваце)", password: "005", onShift: true, schedule: "24/7", isSenior: true, sessionToken: null },
-  "002005008": { role: "chef", name: "Шеф Повар", password: "Шеф повар Амина", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null },
-  "77772222222": { role: "waiter", name: "Официант Али (Старший)", password: "123", schedule: "2/2", onShift: true, kaspi: "77072223344", isSenior: true, sessionToken: null },
-  "009009009": { role: "cashier", name: "Кассир Мадина", password: "КАССА", onShift: true, schedule: "2/2", isSenior: false, sessionToken: null }
+  "001002003": { role: "admin", name: "Директор Эльвира", onShift: true, schedule: "ПН-ПТ", isSenior: false },
+  "02180": { role: "developer", name: "Разработчик (Ваце)", onShift: true, schedule: "24/7", isSenior: true },
+  "002005008": { role: "chef", name: "Шеф Повар", onShift: true, schedule: "2/2", isSenior: false },
+  "77772222222": { role: "waiter", name: "Официант Али (Старший)", schedule: "2/2", onShift: true, kaspi: "77072223344", isSenior: true },
+  "009009009": { role: "cashier", name: "Кассир Мадина", onShift: true, schedule: "2/2", isSenior: false }
 };
 
 export const INITIAL_SUPPORT = [];
-export async function syncMenuWithPaloma(menu, setMenu) {
-  try {
-    const palomaData = await fetchPalomaMenu();
-    const palomaItems = [];
-    if (palomaData.item_groups) {
-      palomaData.item_groups.forEach(group => {
-        if (group.items) {
-          group.items.forEach(item => {
-            if (item.mark_deleted === 0 && item.i_useInMenu === 1) {
-              palomaItems.push(item);
-            }
-          });
-        }
-      });
-    }
-
-    const updatedMenu = menu.map(localItem => {
-      const found = palomaItems.find(p => 
-        p.name.trim().toLowerCase() === localItem.name.trim().toLowerCase()
-      );
-      return { ...localItem, paloma_id: found ? found.object_id : 0 };
-    });
-
-    setMenu(updatedMenu);
-    return updatedMenu;
-  } catch (error) {
-    console.error('Ошибка синхронизации меню с Paloma:', error);
-    return menu;
-  }
-}
-
 export function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(initialValue);
 

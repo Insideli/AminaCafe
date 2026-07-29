@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AminaCafe — безопасные аккаунты сотрудников</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f4f5f7; color: #111827; }
+    main { width: min(1050px, calc(100% - 28px)); margin: 28px auto; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 20px; padding: 22px; margin-bottom: 16px; box-shadow: 0 10px 25px rgba(15,23,42,.05); }
+    h1, h2 { margin-top: 0; }
+    p { line-height: 1.55; color: #4b5563; }
+    .warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+    .rows { display: grid; gap: 12px; }
+    .row { display: grid; grid-template-columns: 1.1fr 1.6fr 1fr 1.4fr auto; gap: 9px; align-items: center; padding: 12px; background: #f9fafb; border-radius: 14px; }
+    input, select, textarea, button { font: inherit; }
+    input, select, textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 10px; padding: 11px; background: #fff; color: #111827; }
+    textarea { min-height: 180px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    button { border: 0; border-radius: 11px; padding: 11px 15px; font-weight: 800; cursor: pointer; }
+    .primary { background: #111827; color: #fff; }
+    .secondary { background: #e5e7eb; color: #111827; }
+    .danger { background: #fee2e2; color: #b91c1c; padding: 10px 12px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    label { display: block; font-size: 12px; font-weight: 800; color: #6b7280; margin-bottom: 5px; }
+    .status { min-height: 24px; font-weight: 700; margin-top: 10px; }
+    @media (max-width: 850px) {
+      .row, .grid { grid-template-columns: 1fr; }
+      .danger { justify-self: start; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card warning">
+    <h1>🔐 Генератор аккаунтов AminaCafe</h1>
+    <p><b>Этот файл работает только на вашем компьютере.</b> Он не отправляет логины и пароли в интернет. Открывайте его двойным нажатием, заполните данные и скопируйте готовые значения в Vercel.</p>
+  </section>
+
+  <section class="card">
+    <h2>1. Сотрудники</h2>
+    <p>Введите новые пароли, которые вы уже придумали. Поле «Логин» должно совпадать с номером сотрудника в сайте.</p>
+    <div id="rows" class="rows"></div>
+    <div class="actions" style="margin-top:14px">
+      <button class="secondary" id="add" type="button">＋ Добавить сотрудника</button>
+      <button class="primary" id="generate" type="button">Создать безопасную конфигурацию</button>
+    </div>
+    <div id="status" class="status"></div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>2. STAFF_ACCOUNTS_JSON</h2>
+      <label for="accounts">Значение переменной Vercel</label>
+      <textarea id="accounts" readonly placeholder="Сначала нажмите кнопку создания"></textarea>
+      <button class="secondary" data-copy="accounts" type="button">Копировать JSON</button>
+    </div>
+    <div class="card">
+      <h2>3. AMINA_SESSION_SECRET</h2>
+      <label for="secret">Значение переменной Vercel</label>
+      <textarea id="secret" readonly style="min-height:90px" placeholder="Сначала нажмите кнопку создания"></textarea>
+      <button class="secondary" data-copy="secret" type="button">Копировать секрет</button>
+    </div>
+  </section>
+</main>
+
+<script>
+  const ITERATIONS = 210000;
+  const encoder = new TextEncoder();
+  const rows = document.getElementById('rows');
+  const status = document.getElementById('status');
+
+  const defaults = [
+    { id: '001002003', name: 'Директор Эльвира', role: 'admin', senior: false },
+    { id: '02180', name: 'Разработчик', role: 'developer', senior: true },
+    { id: '002005008', name: 'Шеф Повар', role: 'chef', senior: false },
+    { id: '77772222222', name: 'Официант Али', role: 'waiter', senior: true },
+    { id: '009009009', name: 'Кассир Мадина', role: 'cashier', senior: false },
+  ];
+
+  function toBase64(bytes) {
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary);
+  }
+
+  function randomBase64(size) {
+    return toBase64(crypto.getRandomValues(new Uint8Array(size)));
+  }
+
+  function addRow(value = {}) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <input class="employee-id" inputmode="numeric" placeholder="Логин" value="${escapeHtml(value.id || '')}">
+      <input class="employee-name" placeholder="Имя сотрудника" value="${escapeHtml(value.name || '')}">
+      <select class="employee-role">
+        <option value="admin">Администратор</option>
+        <option value="developer">Разработчик</option>
+        <option value="chef">Шеф-повар</option>
+        <option value="waiter">Официант</option>
+        <option value="cashier">Кассир</option>
+      </select>
+      <input class="employee-password" type="password" autocomplete="new-password" placeholder="Новый пароль">
+      <button class="danger remove" type="button">Удалить</button>`;
+    row.querySelector('.employee-role').value = value.role || 'waiter';
+    row.dataset.senior = value.senior ? 'true' : 'false';
+    row.querySelector('.remove').addEventListener('click', () => row.remove());
+    rows.appendChild(row);
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  }
+
+  async function hashPassword(password, salt) {
+    const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS },
+      key,
+      256,
+    );
+    return new Uint8Array(bits);
+  }
+
+  async function generate() {
+    status.style.color = '#374151';
+    status.textContent = 'Создаём хэши паролей…';
+    const config = {};
+    const rowElements = [...rows.querySelectorAll('.row')];
+
+    try {
+      if (rowElements.length === 0) throw new Error('Добавьте хотя бы одного сотрудника.');
+
+      for (const row of rowElements) {
+        const id = row.querySelector('.employee-id').value.trim();
+        const name = row.querySelector('.employee-name').value.trim();
+        const role = row.querySelector('.employee-role').value;
+        const password = row.querySelector('.employee-password').value;
+        if (!id || !name || !password) throw new Error('Заполните логин, имя и пароль у каждого сотрудника.');
+        if (password.length < 8) throw new Error(`Пароль сотрудника ${name} должен содержать минимум 8 символов.`);
+        if (config[id]) throw new Error(`Логин ${id} повторяется.`);
+
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const hash = await hashPassword(password, salt);
+        config[id] = {
+          name,
+          role,
+          active: true,
+          isSenior: row.dataset.senior === 'true',
+          salt: toBase64(salt),
+          hash: toBase64(hash),
+          iterations: ITERATIONS,
+        };
+      }
+
+      document.getElementById('accounts').value = JSON.stringify(config);
+      document.getElementById('secret').value = randomBase64(48);
+      status.style.color = '#047857';
+      status.textContent = '✅ Готово. Скопируйте оба значения в Vercel. Пароли в результат не попали — только их защищённые хэши.';
+    } catch (error) {
+      status.style.color = '#b91c1c';
+      status.textContent = `❌ ${error.message}`;
+    }
+  }
+
+  async function copyField(id, button) {
+    const value = document.getElementById(id).value;
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    const old = button.textContent;
+    button.textContent = 'Скопировано ✓';
+    setTimeout(() => { button.textContent = old; }, 1400);
+  }
+
+  defaults.forEach(addRow);
+  document.getElementById('add').addEventListener('click', () => addRow());
+  document.getElementById('generate').addEventListener('click', generate);
+  document.querySelectorAll('[data-copy]').forEach(button => {
+    button.addEventListener('click', () => copyField(button.dataset.copy, button));
+  });
+</script>
+</body>
+</html>

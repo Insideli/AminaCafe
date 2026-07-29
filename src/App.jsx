@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Component } from 'react';
 import GuestApp from './GuestApp.jsx';
 import StaffApp from './StaffApp.jsx';
-import { INITIAL_CUSTOMERS, INITIAL_ROLES, useLocalStorage } from './data.js';
+import { INITIAL_CUSTOMERS, useLocalStorage } from './data.js';
 
 // 🔥 ИМПОРТ FIREBASE ДЛЯ GOOGLE AUTH
 import { initializeApp } from "firebase/app";
@@ -52,7 +52,6 @@ function useDeviceStorage(key, initialValue) {
 function MainApp() {
   const [showSplash, setShowSplash] = useState(true);
   const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_roles_v12', INITIAL_ROLES);
   const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
 
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
@@ -65,6 +64,8 @@ function MainApp() {
   const [authMode, setAuthMode] = useState('login_guest'); 
   const [tempPhone, setTempPhone] = useState(''); 
   const [tempPassword, setTempPassword] = useState('');
+  const [staffLoginLoading, setStaffLoginLoading] = useState(false);
+  const [staffSessionChecked, setStaffSessionChecked] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -99,49 +100,75 @@ function MainApp() {
     };
   }, [showAuthModal]);
 
-  useEffect(() => {
-    if (isAuthenticated && currentUser.phone) {
-      let dbToken = null;
-      if (currentUser.role === 'guest') {
-        dbToken = (customers || {})[currentUser.phone]?.sessionToken;
-      } else {
-        dbToken = (roles || {})[currentUser.phone]?.sessionToken;
-      }
 
-      if (dbToken && currentUser.sessionToken && dbToken !== currentUser.sessionToken) {
-        alert(lang === 'ru' ? "⚠️ Ваш аккаунт открыт на другом устройстве! Сессия завершена." : "⚠️ Аккаунтыңыз басқа құрылғыда ашылды! Сессия аяқталды.");
-        setCurrentUser({ role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null });
-        window.location.reload();
-      }
-    }
-  }, [roles, customers, currentUser, isAuthenticated, lang, setCurrentUser]);
-
+  // ================================================================
+  // 🔐 ЗАЩИЩЁННЫЙ ВХОД ДЛЯ ПЕРСОНАЛА ЧЕРЕЗ VERCEL FUNCTION
+  // ================================================================
   useEffect(() => {
-    import('./data.js').then(module => {
-      if (module.syncMenuWithPaloma) {
-        module.syncMenuWithPaloma(menu, setMenu)
-          .then(() => console.log("✅ Меню успешно загружено из Paloma365!"))
-          .catch(err => console.error("❌ Ошибка при загрузке меню:", err));
+    let cancelled = false;
+
+    const restoreStaffSession = async () => {
+      try {
+        const response = await fetch('/api/auth?action=session', {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        });
+
+        if (!response.ok) {
+          if (!cancelled && currentUser.role !== 'guest') {
+            setCurrentUser({ role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null });
+          }
+          return;
+        }
+
+        const data = await response.json();
+        if (!cancelled && data?.user) {
+          setCurrentUser({ ...data.user, sessionToken: null });
+        }
+      } catch (error) {
+        console.warn('Не удалось проверить сессию сотрудника:', error);
+        if (!cancelled && currentUser.role !== 'guest') {
+          setCurrentUser({ role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null });
+        }
+      } finally {
+        if (!cancelled) setStaffSessionChecked(true);
       }
-    });
+    };
+
+    void restoreStaffSession();
+    return () => { cancelled = true; };
+    // Проверяем серверную сессию один раз при запуске приложения.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ================================================================
-  // 🔥 ВХОД ДЛЯ ПЕРСОНАЛА
-  // ================================================================
-  const handleStaffSubmit = (e) => {
+  const handleStaffSubmit = async (e) => {
     e.preventDefault();
-    const staffMember = (roles || {})[tempPhone];
-    if (!staffMember) return alert(lang === 'ru' ? "❌ Неверный логин сотрудника!" : "❌ Қызметкердің логині қате!");
-    if (staffMember.password !== tempPassword) return alert(lang === 'ru' ? "❌ Неверный пароль!" : "❌ Құпия сөз қате!");
-    if (!staffMember.onShift && staffMember.role !== 'admin' && staffMember.role !== 'developer') return alert(lang === 'ru' ? "❌ Сегодня не ваша смена!" : "❌ Бүгін сіздің ауысымыңыз емес!");
+    if (staffLoginLoading) return;
 
-    const newToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    const updatedRoles = { ...roles, [tempPhone]: { ...staffMember, sessionToken: newToken } };
-    setRoles(updatedRoles);
+    setStaffLoginLoading(true);
+    try {
+      const response = await fetch('/api/auth?action=login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ employeeId: tempPhone.trim(), password: tempPassword }),
+      });
 
-    setCurrentUser({ role: staffMember.role, phone: tempPhone, name: staffMember.name, station: staffMember.station || null, isSenior: staffMember.isSenior || false, sessionToken: newToken });
-    setShowAuthModal(false);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || (lang === 'ru' ? 'Не удалось войти.' : 'Кіру мүмкін болмады.'));
+      }
+
+      setCurrentUser({ ...data.user, sessionToken: null });
+      setStaffSessionChecked(true);
+      setTempPassword('');
+      setShowAuthModal(false);
+    } catch (error) {
+      alert(`❌ ${error.message}`);
+    } finally {
+      setStaffLoginLoading(false);
+    }
   };
 
   // ================================================================
@@ -186,10 +213,35 @@ function MainApp() {
     }
   };
 
-  const logoutOrLogin = () => { 
-    if (!isAuthenticated) { setAuthMode('login_guest'); setShowAuthModal(true); } 
-    else { setCurrentUser({role: 'guest', phone: '', name: '', station: null, sessionToken: null}); }
+  const logoutOrLogin = async () => {
+    if (!isAuthenticated) {
+      setAuthMode('login_guest');
+      setShowAuthModal(true);
+      return;
+    }
+
+    if (currentUser.role !== 'guest') {
+      try {
+        await fetch('/api/auth?action=logout', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' },
+        });
+      } catch (error) {
+        console.warn('Не удалось завершить серверную сессию:', error);
+      }
+    }
+
+    setCurrentUser({ role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null });
   };
+
+  if (!staffSessionChecked && currentUser.role !== 'guest') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f4f5f7', color: '#374151', fontWeight: 'bold' }}>
+        Проверяем защищённую сессию…
+      </div>
+    );
+  }
 
   if (showSplash) {
     return (
@@ -250,8 +302,8 @@ function MainApp() {
                   <input type="password" placeholder="***" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)} required style={{ width: '100%', padding: '16px', borderRadius: '14px', border: '2px solid #e5e7eb', fontSize: '16px', color: '#111827', backgroundColor: '#f9fafb', boxSizing: 'border-box' }} />
                 </div>
 
-                <button type="submit" style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', marginTop: '5px' }}>
-                  {lang === 'ru' ? 'Войти' : 'Кіру'}
+                <button type="submit" disabled={staffLoginLoading} style={{ width: '100%', padding: '16px', borderRadius: '14px', border: 'none', backgroundColor: '#111827', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: staffLoginLoading ? 'wait' : 'pointer', marginTop: '5px', opacity: staffLoginLoading ? 0.7 : 1 }}>
+                  {staffLoginLoading ? (lang === 'ru' ? 'Проверяем…' : 'Тексерілуде…') : (lang === 'ru' ? 'Войти' : 'Кіру')}
                 </button>
                 <div style={{ marginTop: '10px', borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
                   <button type="button" onClick={() => setAuthMode('login_guest')} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold' }}>← {lang === 'ru' ? 'Назад к гостям' : 'Артқа'}</button>

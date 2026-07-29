@@ -231,7 +231,8 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const cartArray = Object.values(cashierCart || {}); 
     if (cartArray.length === 0) return;
     const subtotal = cartArray.reduce((acc, i) => acc + (Number(i.price) * Number(i.quantity)), 0);
-    const serviceFee = Math.round(subtotal * 0.15);
+    const serviceFee = 0;
+
     const total = subtotal + serviceFee;
     const text = cartArray.map(i => `${i.name} (x${i.quantity})`).join(', ');
     const newOrder = { 

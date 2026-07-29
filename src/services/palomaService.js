@@ -161,6 +161,8 @@ export function buildPalomaOrder(internalOrder) {
     phone: contactPhone,
     email: extractEmail(internalOrder),
     address: isDelivery ? String(internalOrder.deliveryAddress || '') : '',
+    coordinate_long: String(internalOrder.coordinateLong || internalOrder.longitude || '0'),
+    coordinate_lat: String(internalOrder.coordinateLat || internalOrder.latitude || '0'),
     comment: commentParts.join(' | '),
     person_amount: Math.max(1, Math.round(toNumber(internalOrder.personAmount, 1))),
     total_price: toNumber(internalOrder.total),

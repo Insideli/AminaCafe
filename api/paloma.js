@@ -33,6 +33,11 @@ function requireEnvironment() {
   const authkey = process.env.PALOMA_AUTHKEY?.trim();
   const pointId = Number(process.env.PALOMA_POINT_ID || 0);
   const host = (process.env.PALOMA_HOST || DEFAULT_PALOMA_HOST).replace(/\/$/, '');
+  const defaultPhone = process.env.PALOMA_DEFAULT_PHONE?.trim() || '';
+  const defaultEmail = process.env.PALOMA_DEFAULT_EMAIL?.trim() || 'no-reply@example.com';
+  const defaultAddress = process.env.PALOMA_DEFAULT_ADDRESS?.trim() || 'Кафе Амина — самовывоз';
+  const defaultLongitude = process.env.PALOMA_COORDINATE_LONG?.trim() || '0';
+  const defaultLatitude = process.env.PALOMA_COORDINATE_LAT?.trim() || '0';
 
   if (!authkey) {
     const error = new Error('На сервере не задан PALOMA_AUTHKEY.');
@@ -40,7 +45,16 @@ function requireEnvironment() {
     throw error;
   }
 
-  return { authkey, pointId, host };
+  return {
+    authkey,
+    pointId,
+    host,
+    defaultPhone,
+    defaultEmail,
+    defaultAddress,
+    defaultLongitude,
+    defaultLatitude,
+  };
 }
 
 function validateOrder(body) {
@@ -63,6 +77,22 @@ function validateOrder(body) {
     if (!Number.isInteger(objectId) || objectId <= 0) return 'У позиции некорректный object_id.';
     if (!Number.isFinite(count) || count <= 0 || count > 100) return 'У позиции некорректное количество.';
     if (!Number.isFinite(price) || price < 0 || price > 10000000) return 'У позиции некорректная цена.';
+  }
+
+  const requiredTextFields = [
+    'date',
+    'name',
+    'phone',
+    'email',
+    'address',
+    'coordinate_long',
+    'coordinate_lat',
+  ];
+
+  for (const field of requiredTextFields) {
+    if (!String(body[field] ?? '').trim()) {
+      return `Обязательное поле ${field} пустое.`;
+    }
   }
 
   const total = Number(body.total_price);
@@ -102,7 +132,16 @@ export default async function handler(req, res) {
     const session = requireStaffSession(req);
     requireRole(session, ACTION_ROLES[action]);
 
-    const { authkey, pointId, host } = requireEnvironment();
+    const {
+      authkey,
+      pointId,
+      host,
+      defaultPhone,
+      defaultEmail,
+      defaultAddress,
+      defaultLongitude,
+      defaultLatitude,
+    } = requireEnvironment();
     const palomaMethod = action === 'health' ? 'points' : action;
 
     if (['order', 'stoplist'].includes(palomaMethod) && !pointId) {
@@ -114,13 +153,30 @@ export default async function handler(req, res) {
 
     let outboundBody = req.body;
     if (palomaMethod === 'order') {
-      const validationError = validateOrder(req.body);
-      if (validationError) return sendJson(res, 400, { error: validationError });
       const auditComment = `Отправил: ${session.name} (${session.phone})`;
+
       outboundBody = {
         ...req.body,
-        comment: [String(req.body.comment || '').trim(), auditComment].filter(Boolean).join(' | '),
+        phone: String(req.body?.phone || defaultPhone || '').trim(),
+        email: String(req.body?.email || defaultEmail).trim(),
+        address: String(req.body?.address || defaultAddress).trim(),
+        coordinate_long: String(req.body?.coordinate_long || defaultLongitude).trim(),
+        coordinate_lat: String(req.body?.coordinate_lat || defaultLatitude).trim(),
+        comment: [
+          String(req.body?.comment || '').trim(),
+          auditComment,
+        ].filter(Boolean).join(' | '),
       };
+
+      if (!outboundBody.phone) {
+        return sendJson(res, 500, {
+          error: 'Задайте PALOMA_DEFAULT_PHONE в Vercel в формате +7XXXXXXXXXX.',
+          code: 'PALOMA_DEFAULT_PHONE_NOT_CONFIGURED',
+        });
+      }
+
+      const validationError = validateOrder(outboundBody);
+      if (validationError) return sendJson(res, 400, { error: validationError });
     }
 
     const params = new URLSearchParams({
@@ -146,8 +202,10 @@ export default async function handler(req, res) {
     try {
       response = await fetch(`${host}/company/api/?${params.toString()}`, {
         method: expectedMethod,
-        headers: expectedMethod === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
-        body: expectedMethod === 'POST' ? JSON.stringify(outboundBody) : undefined,
+        headers: expectedMethod === 'POST' ? { Accept: 'application/json' } : undefined,
+        body: expectedMethod === 'POST'
+          ? Buffer.from(JSON.stringify(outboundBody), 'utf8')
+          : undefined,
         signal: controller.signal,
       });
     } finally {

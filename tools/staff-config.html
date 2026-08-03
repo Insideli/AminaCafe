@@ -74,8 +74,6 @@
   const defaults = [
     { id: '001002003', name: 'Директор Эльвира', role: 'admin', senior: false },
     { id: '02180', name: 'Разработчик', role: 'developer', senior: true },
-    { id: '002005008', name: 'Шеф Повар', role: 'chef', senior: false },
-    { id: '77772222222', name: 'Официант Али', role: 'waiter', senior: true },
     { id: '009009009', name: 'Кассир Мадина', role: 'cashier', senior: false },
   ];
 
@@ -98,13 +96,11 @@
       <select class="employee-role">
         <option value="admin">Администратор</option>
         <option value="developer">Разработчик</option>
-        <option value="chef">Шеф-повар</option>
-        <option value="waiter">Официант</option>
         <option value="cashier">Кассир</option>
       </select>
       <input class="employee-password" type="password" autocomplete="new-password" placeholder="Новый пароль">
       <button class="danger remove" type="button">Удалить</button>`;
-    row.querySelector('.employee-role').value = value.role || 'waiter';
+    row.querySelector('.employee-role').value = value.role || 'cashier';
     row.dataset.senior = value.senior ? 'true' : 'false';
     row.querySelector('.remove').addEventListener('click', () => row.remove());
     rows.appendChild(row);

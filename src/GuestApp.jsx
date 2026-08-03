@@ -4,16 +4,16 @@ import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, I
 import { createOrderId } from './utils/orderId.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
-  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
+  const [menu, setMenu] = useLocalStorage('amina_pinta_menu_v1', INITIAL_MENU);
   // 🔥 ТЕПЕРЬ ГОСТИ ТОЖЕ ВИДЯТ ДИНАМИЧЕСКИЕ КАТЕГОРИИ ИЗ ПАЛОМЫ
-  const [categories, setCategories] = useLocalStorage('amina_categories_v12', CATEGORIES); 
-  const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
-  const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
-  const [roles, setRoles] = useLocalStorage('amina_staff_profiles_v13', INITIAL_ROLES);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []); 
+  const [categories, setCategories] = useLocalStorage('amina_pinta_categories_v1', CATEGORIES); 
+  const [tables, setTables] = useLocalStorage('amina_pinta_tables_v1', INITIAL_TABLES);
+  const [orders, setOrders] = useLocalStorage('amina_pinta_orders_v1', []);
+  const [customers, setCustomers] = useLocalStorage('amina_pinta_customers_v1', INITIAL_CUSTOMERS);
+  const [roles, setRoles] = useLocalStorage('amina_pinta_staff_profiles_v1', INITIAL_ROLES);
+  const [reviews, setReviews] = useLocalStorage('amina_pinta_reviews_v1', []); 
   
-  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
+  const [supportChat, setSupportChat] = useLocalStorage('amina_pinta_support_v1', INITIAL_SUPPORT);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
 

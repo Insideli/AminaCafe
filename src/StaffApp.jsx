@@ -5,16 +5,16 @@ import { submitOrderToPaloma, syncPalomaCatalog, testPalomaConnection } from './
 import { createOrderId } from './utils/orderId.js';
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
-  const [menu, setMenu] = useLocalStorage('amina_menu_v12', INITIAL_MENU);
-  const [categories, setCategories] = useLocalStorage('amina_categories_v12', DEFAULT_CATEGORIES); 
-  const [tables, setTables] = useLocalStorage('amina_tables_v12', INITIAL_TABLES);
-  const [orders, setOrders] = useLocalStorage('amina_orders_v12', []);
-  const [roles, setRoles] = useLocalStorage('amina_staff_profiles_v13', INITIAL_ROLES);
-  const [reviews, setReviews] = useLocalStorage('amina_reviews_v12', []);
-  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
+  const [menu, setMenu] = useLocalStorage('amina_pinta_menu_v1', INITIAL_MENU);
+  const [categories, setCategories] = useLocalStorage('amina_pinta_categories_v1', DEFAULT_CATEGORIES); 
+  const [tables, setTables] = useLocalStorage('amina_pinta_tables_v1', INITIAL_TABLES);
+  const [orders, setOrders] = useLocalStorage('amina_pinta_orders_v1', []);
+  const [roles, setRoles] = useLocalStorage('amina_pinta_staff_profiles_v1', INITIAL_ROLES);
+  const [reviews, setReviews] = useLocalStorage('amina_pinta_reviews_v1', []);
+  const [analytics, setAnalytics] = useLocalStorage('amina_pinta_analytics_v1', { qr: 0, link: 0 });
+  const [customers, setCustomers] = useLocalStorage('amina_pinta_customers_v1', INITIAL_CUSTOMERS);
 
-  const [supportChat, setSupportChat] = useLocalStorage('amina_support_v12', INITIAL_SUPPORT);
+  const [supportChat, setSupportChat] = useLocalStorage('amina_pinta_support_v1', INITIAL_SUPPORT);
   const [activeSupportPhone, setActiveSupportPhone] = useState(null);
   const [supportAdminText, setSupportAdminText] = useState('');
 
@@ -80,12 +80,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     const sync = (e) => {
       try {
         if (!e.newValue) return; const parsed = JSON.parse(e.newValue);
-        if (e.key === 'amina_orders_v12') setOrders(parsed || []); if (e.key === 'amina_tables_v12') setTables(parsed || []);
-        if (e.key === 'amina_menu_v12') setMenu(parsed || []); if (e.key === 'amina_staff_profiles_v13') setRoles(parsed || {});
-        if (e.key === 'amina_reviews_v12') setReviews(parsed || []); if (e.key === 'amina_analytics_v12') setAnalytics(parsed || { qr:0, link:0 });
-        if (e.key === 'amina_customers_v12') setCustomers(parsed || {});
-        if (e.key === 'amina_support_v12') setSupportChat(parsed || []);
-        if (e.key === 'amina_categories_v12') setCategories(parsed || DEFAULT_CATEGORIES);
+        if (e.key === 'amina_pinta_orders_v1') setOrders(parsed || []); if (e.key === 'amina_pinta_tables_v1') setTables(parsed || []);
+        if (e.key === 'amina_pinta_menu_v1') setMenu(parsed || []); if (e.key === 'amina_pinta_staff_profiles_v1') setRoles(parsed || {});
+        if (e.key === 'amina_pinta_reviews_v1') setReviews(parsed || []); if (e.key === 'amina_pinta_analytics_v1') setAnalytics(parsed || { qr:0, link:0 });
+        if (e.key === 'amina_pinta_customers_v1') setCustomers(parsed || {});
+        if (e.key === 'amina_pinta_support_v1') setSupportChat(parsed || []);
+        if (e.key === 'amina_pinta_categories_v1') setCategories(parsed || DEFAULT_CATEGORIES);
       } catch (err) {}
     };
     window.addEventListener('storage', sync); return () => window.removeEventListener('storage', sync);

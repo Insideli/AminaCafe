@@ -51,8 +51,8 @@ function useDeviceStorage(key, initialValue) {
 
 function MainApp() {
   const [showSplash, setShowSplash] = useState(true);
-  const [customers, setCustomers] = useLocalStorage('amina_customers_v12', INITIAL_CUSTOMERS);
-  const [analytics, setAnalytics] = useLocalStorage('amina_analytics_v12', { qr: 0, link: 0 });
+  const [customers, setCustomers] = useLocalStorage('amina_pinta_customers_v1', INITIAL_CUSTOMERS);
+  const [analytics, setAnalytics] = useLocalStorage('amina_pinta_analytics_v1', { qr: 0, link: 0 });
 
   const [currentUser, setCurrentUser] = useDeviceStorage('amina_current_user_device', { role: 'guest', phone: '', name: '', station: null, isSenior: false, sessionToken: null }); 
   const [lang, setLang] = useDeviceStorage('amina_lang_device', 'ru');

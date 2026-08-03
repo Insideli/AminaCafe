@@ -20,6 +20,7 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
 
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [palomaStatus, setPalomaStatus] = useState({ state: 'idle', message: 'Связь ещё не проверялась' });
+  const [paymentActionId, setPaymentActionId] = useState(null);
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [adminMenuCategory, setAdminMenuCategory] = useState('all');
@@ -119,6 +120,137 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       alert(`⚠️ Заказ сохранён в AminaCafe, но не попал в Paloma365. Причина: ${error.message}`);
     }
   };
+  const confirmGuestPayment = async (order, guestName) => {
+    if (!order?.id || paymentActionId) return;
+
+    setPaymentActionId(order.id);
+
+    const now = new Date().toISOString();
+    const paymentInfo = {
+      ...(order.payment || {}),
+      status: 'confirmed',
+      confirmedAt: order.payment?.confirmedAt || now,
+      confirmedBy: currentUser.phone,
+      confirmedByName: currentUser.name,
+    };
+
+    if (order.orderType === 'booking_deposit') {
+      setOrders(prev => (prev || []).map(item =>
+        item.id === order.id
+          ? {
+              ...item,
+              status: 'payment_confirmed',
+              payMethod: 'kaspi',
+              payment: paymentInfo,
+            }
+          : item
+      ));
+
+      setTables(prev => (prev || []).map(table =>
+        table.id === order.tableId
+          ? {
+              ...table,
+              bookedBy: order.phone,
+              bookedTime: order.bookedTime,
+              status: 'free',
+            }
+          : table
+      ));
+
+      setPaymentActionId(null);
+      return;
+    }
+
+    setOrders(prev => (prev || []).map(item =>
+      item.id === order.id
+        ? {
+            ...item,
+            status: 'sending_to_paloma',
+            payMethod: 'kaspi',
+            payment: paymentInfo,
+            palomaSync: {
+              ...(item.palomaSync || {}),
+              status: 'sending',
+              startedAt: now,
+            },
+          }
+        : item
+    ));
+
+    try {
+      const result = await submitOrderToPaloma({
+        ...order,
+        customerName: guestName || order.customerName || 'Гость',
+        payMethod: 'kaspi',
+        payment: paymentInfo,
+      });
+
+      setOrders(prev => (prev || []).map(item =>
+        item.id === order.id
+          ? {
+              ...item,
+              status: 'sent_to_paloma',
+              payMethod: 'kaspi',
+              payment: paymentInfo,
+              palomaSync: {
+                status: 'synced',
+                palomaOrderId: result?.paloma_order_id || null,
+                receiptId: result?.receipt_id || null,
+                syncedAt: new Date().toISOString(),
+              },
+            }
+          : item
+      ));
+
+      console.log('✅ Оплата подтверждена, заказ отправлен в Paloma365', result);
+    } catch (error) {
+      setOrders(prev => (prev || []).map(item =>
+        item.id === order.id
+          ? {
+              ...item,
+              status: 'paloma_error',
+              payMethod: 'kaspi',
+              payment: paymentInfo,
+              palomaSync: {
+                status: 'failed',
+                error: error.message,
+                failedAt: new Date().toISOString(),
+              },
+            }
+          : item
+      ));
+
+      alert(
+        `⚠️ Деньги подтверждены, но заказ не отправился в Paloma365.
+
+` +
+        `Заказ сохранён. Причина: ${error.message}`
+      );
+    } finally {
+      setPaymentActionId(null);
+    }
+  };
+
+  const rejectGuestPayment = (order) => {
+    if (!order?.id || paymentActionId) return;
+
+    setOrders(prev => (prev || []).map(item =>
+      item.id === order.id
+        ? {
+            ...item,
+            status: 'payment_rejected',
+            payment: {
+              ...(item.payment || {}),
+              status: 'rejected',
+              rejectedAt: new Date().toISOString(),
+              checkedBy: currentUser.phone,
+              checkedByName: currentUser.name,
+            },
+          }
+        : item
+    ));
+  };
+
   const getTableIcon = (type) => type === 'cabin' ? '🚪' : type === 'tapchan' ? '🛋️' : '🪑';
 
   const handleTestPaloma = async () => {
@@ -271,7 +403,21 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
     setPosCart(prev => ({ ...prev, 'discount_10': { id: 'discount_10', name: 'Скидка Старшего (-10%)', price: -discountAmount, quantity: 1, isStop: false, imgUrl: '' } }));
   };
 
-  const validOrders = (orders || []).filter(o => o.status !== 'rejected' && o.status !== 'declined' && o.status !== 'transfer_pending' && o.status !== 'waiter_pending');
+  const nonRevenueStatuses = new Set([
+    'rejected',
+    'declined',
+    'cancelled',
+    'transfer_pending',
+    'payment_checking',
+    'payment_rejected',
+    'sending_to_paloma',
+    'paloma_error',
+    'waiter_pending',
+  ]);
+
+  const validOrders = (orders || []).filter(
+    order => !nonRevenueStatuses.has(order.status)
+  );
   const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
   const kaspiRevenue = validOrders.filter(o => o.payMethod === 'kaspi').reduce((sum, o) => sum + o.total, 0);
   const cashRevenue = validOrders.filter(o => o.payMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
@@ -316,33 +462,173 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   };
 
   const PendingTransfersBlock = () => {
-    const pendingTransfers = (orders || []).filter(o => o.status === 'transfer_pending');
+    const pendingTransfers = (orders || []).filter(order =>
+      [
+        'transfer_pending',
+        'payment_checking',
+        'sending_to_paloma',
+        'paloma_error',
+      ].includes(order.status)
+    );
+
     if (pendingTransfers.length === 0) return null;
+
     return (
-       <div style={{ backgroundColor: '#fff', border: '4px solid #f59e0b', padding: '20px', borderRadius: '24px', marginBottom: '25px', boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)' }}>
-          <h2 style={{color: '#d97706', margin: '0 0 15px 0', fontSize: '18px'}}>💳 Ожидают подтверждения!</h2>
-          {pendingTransfers.map(o => {
-             const guestInfo = customers[o.phone] || { name: 'Гость' };
-             return (
-             <div key={o.id} style={{ background: '#fef3c7', padding: '15px', borderRadius: '12px', marginBottom: '10px' }}>
-                <p style={{margin: '0 0 5px 0', fontSize: '15px', color: '#111827'}}>Заказ/Бронь: <b>{o.tableName}</b></p>
-                <p style={{margin: '0 0 5px 0', fontSize: '14px', color: '#4b5563'}}>Гость: <b>{guestInfo.name} ({o.phone})</b></p>
-                {o.waiterName && <p style={{margin: '0 0 10px 0', fontSize: '14px', color: '#4b5563'}}>Официант: <b>{o.waiterName}</b></p>}
-                <p style={{margin: '0 0 10px 0', fontSize: '15px', color: '#111827'}}>К оплате: <b style={{fontSize: '18px', color: '#b45309'}}>{o.total} ₸</b></p>
-                <div style={{display: 'flex', gap: '10px'}}>
-                   <button onClick={() => {
-                       changeOrderStatus(o.id, 'new', 'kaspi');
-                       if (o.orderType === 'booking_deposit') {
-                           setTables(prev => (prev || []).map(t => t.id === o.tableId ? { ...t, bookedBy: o.phone, bookedTime: o.bookedTime, status: 'free' } : t));
-                       } else {
-                           void syncOrderWithPaloma({ ...o, customerName: guestInfo.name, payMethod: 'kaspi' }, 'Подтверждённый заказ гостя');
-                       }
-                   }} style={{flex: 1, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>✅ Подтвердить</button>
-                   <button onClick={() => changeOrderStatus(o.id, 'rejected')} style={{flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer'}}>❌ Деньги не поступили</button>
-                </div>
-             </div>
-          )})}
-       </div>
+      <div style={{
+        backgroundColor: '#fff',
+        border: '4px solid #f59e0b',
+        padding: '20px',
+        borderRadius: '24px',
+        marginBottom: '25px',
+        boxShadow: '0 10px 25px rgba(245, 158, 11, 0.2)'
+      }}>
+        <h2 style={{
+          color: '#d97706',
+          margin: '0 0 15px 0',
+          fontSize: '18px'
+        }}>
+          💳 Проверка переводов
+        </h2>
+
+        {pendingTransfers.map(order => {
+          const guestInfo = customers[order.phone] || {
+            name: order.customerName || 'Гость'
+          };
+
+          const isSending = order.status === 'sending_to_paloma';
+          const isPalomaError = order.status === 'paloma_error';
+          const isBusy = paymentActionId === order.id || isSending;
+
+          return (
+            <div
+              key={order.id}
+              style={{
+                background: isPalomaError ? '#fee2e2' : '#fef3c7',
+                padding: '16px',
+                borderRadius: '14px',
+                marginBottom: '12px',
+                border: isPalomaError
+                  ? '2px solid #ef4444'
+                  : '1px solid #f59e0b'
+              }}
+            >
+              <p style={{
+                margin: '0 0 5px 0',
+                fontSize: '15px',
+                color: '#111827'
+              }}>
+                Заказ: <b>{order.tableName}</b>
+              </p>
+
+              <p style={{
+                margin: '0 0 5px 0',
+                fontSize: '14px',
+                color: '#4b5563'
+              }}>
+                Гость: <b>{guestInfo.name} ({order.phone})</b>
+              </p>
+
+              <p style={{
+                margin: '0 0 8px 0',
+                fontSize: '14px',
+                color: '#4b5563'
+              }}>
+                Состав: <b>{order.itemsText || 'Не указан'}</b>
+              </p>
+
+              <p style={{
+                margin: '0 0 12px 0',
+                fontSize: '15px',
+                color: '#111827'
+              }}>
+                К оплате:{' '}
+                <b style={{
+                  fontSize: '20px',
+                  color: '#b45309'
+                }}>
+                  {order.total} ₸
+                </b>
+              </p>
+
+              {isSending && (
+                <p style={{
+                  padding: '10px',
+                  borderRadius: '10px',
+                  background: '#dbeafe',
+                  color: '#1d4ed8',
+                  fontWeight: 'bold'
+                }}>
+                  ⏳ Отправляем заказ в Paloma365…
+                </p>
+              )}
+
+              {isPalomaError && (
+                <p style={{
+                  padding: '10px',
+                  borderRadius: '10px',
+                  background: '#fff',
+                  color: '#b91c1c',
+                  fontWeight: 'bold'
+                }}>
+                  ⚠️ Деньги подтверждены, но Paloma вернула ошибку:
+                  <br />
+                  {order.palomaSync?.error || 'Неизвестная ошибка'}
+                </p>
+              )}
+
+              <div style={{
+                display: 'flex',
+                gap: '10px',
+                flexWrap: 'wrap'
+              }}>
+                <button
+                  disabled={isBusy}
+                  onClick={() =>
+                    confirmGuestPayment(order, guestInfo.name)
+                  }
+                  style={{
+                    flex: 1,
+                    minWidth: '180px',
+                    padding: '13px',
+                    background: isBusy ? '#9ca3af' : '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontWeight: 'bold',
+                    cursor: isBusy ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isPalomaError
+                    ? '🔄 Повторить отправку'
+                    : isSending
+                      ? '⏳ Отправляется…'
+                      : '✅ Деньги поступили'}
+                </button>
+
+                {!isPalomaError && !isSending && (
+                  <button
+                    disabled={isBusy}
+                    onClick={() => rejectGuestPayment(order)}
+                    style={{
+                      flex: 1,
+                      minWidth: '180px',
+                      padding: '13px',
+                      background: '#ef4444',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ❌ Деньги не поступили
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     );
   };
 

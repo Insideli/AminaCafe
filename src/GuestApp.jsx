@@ -156,27 +156,53 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   }, []);
 
   useEffect(() => {
-    if (pendingOrderId && paymentStatus === 'processing') {
-      const checkOrder = (orders || []).find(o => o.id === pendingOrderId);
-      
-      if (checkOrder) {
-        if (checkOrder.status === 'new') { 
-          if (checkOrder.orderType === 'booking_deposit') {
-             setTables(prev => (prev || []).map(t => t.id === checkOrder.tableId ? { ...t, bookedBy: currentUser.phone, bookedTime: checkOrder.bookedTime, status: 'free' } : t));
-             setPaymentStatus('booking_success');
-          } else {
-             setPaymentStatus('success'); 
-          }
-          setPendingOrderId(null); 
-        } 
-        else if (checkOrder.status === 'rejected' || checkOrder.status === 'declined' || checkOrder.status === 'cancelled') { 
-          setPaymentStatus('rejected'); 
-        }
-      } else {
-        setPaymentStatus('rejected');
-      }
+    if (!pendingOrderId || paymentStatus !== 'processing') return;
+
+    const checkOrder = (orders || []).find(
+      order => order.id === pendingOrderId
+    );
+
+    if (!checkOrder) {
+      setPaymentStatus('rejected');
+      return;
     }
-  }, [orders, pendingOrderId, paymentStatus, currentUser.phone]);
+
+    if (
+      checkOrder.orderType === 'booking_deposit'
+      && checkOrder.status === 'payment_confirmed'
+    ) {
+      setPaymentStatus('booking_success');
+      setPendingOrderId(null);
+      return;
+    }
+
+    if (checkOrder.status === 'sent_to_paloma') {
+      setPaymentStatus('success');
+      setPendingOrderId(null);
+      return;
+    }
+
+    if (
+      [
+        'payment_rejected',
+        'rejected',
+        'declined',
+        'cancelled',
+      ].includes(checkOrder.status)
+    ) {
+      setPaymentStatus('rejected');
+      return;
+    }
+
+    if (checkOrder.status === 'paloma_error') {
+      setPaymentStatus('paloma_error');
+    }
+  }, [
+    orders,
+    pendingOrderId,
+    paymentStatus,
+    currentUser.phone
+  ]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -219,7 +245,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       const existingOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (existingOrder && existingOrder.orderType === 'booking_deposit') {
         setOrders(prev => (prev || []).map(o => 
-          o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
+          o.id === pendingOrderId ? { ...o, status: 'payment_checking' } : o
         ));
         setPaymentStatus('processing');
         return;
@@ -237,7 +263,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
        total: 1000,
        orderType: 'booking_deposit',
        date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-       status: 'transfer_pending',
+       status: 'payment_checking',
        payMethod: 'kaspi',
        bookedTime: bookingTime
     };
@@ -351,13 +377,13 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       const existingOrder = (orders || []).find(o => o.id === pendingOrderId);
       if (existingOrder && existingOrder.orderType !== 'booking_deposit') {
         setOrders(prev => (prev || []).map(o => 
-          o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
+          o.id === pendingOrderId ? { ...o, status: 'payment_checking' } : o
         ));
         setPaymentStatus('processing');
         return;
       }
     }
-    const newOrder = createOrderObject('transfer_pending', null, null, 'kaspi');
+    const newOrder = createOrderObject('payment_checking', null, null, 'kaspi');
     setOrders(prev => [newOrder, ...(prev || [])]);
     setPendingOrderId(newOrder.id);
     setPaymentStatus('processing'); 
@@ -863,7 +889,7 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <button onClick={() => { 
                     if (pendingOrderId) {
                       setOrders(prev => (prev || []).map(o => 
-                        o.id === pendingOrderId ? { ...o, status: 'transfer_pending' } : o
+                        o.id === pendingOrderId ? { ...o, status: 'payment_checking' } : o
                       ));
                       setPaymentStatus('processing');
                     } else {
@@ -884,6 +910,71 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                     💬 В поддержку
                   </button>
                 </div>
+              </div>
+            )}
+
+            {paymentStatus === 'paloma_error' && (
+              <div style={{
+                textAlign: 'center',
+                padding: '30px 0'
+              }}>
+                <div style={{
+                  fontSize: '70px',
+                  marginBottom: '15px'
+                }}>
+                  🛠️
+                </div>
+
+                <h2 style={{
+                  margin: '0 0 10px 0',
+                  fontSize: '24px',
+                  color: '#111827'
+                }}>
+                  Оплата подтверждена
+                </h2>
+
+                <p style={{
+                  color: '#4b5563',
+                  marginBottom: '15px',
+                  fontSize: '15px',
+                  lineHeight: '1.5'
+                }}>
+                  Деньги поступили. Возникла временная ошибка при
+                  передаче заказа в Paloma365.
+                </p>
+
+                <p style={{
+                  color: '#b45309',
+                  background: '#fef3c7',
+                  padding: '13px',
+                  borderRadius: '12px',
+                  fontWeight: 'bold',
+                  lineHeight: '1.4'
+                }}>
+                  Не оплачивайте заказ повторно. Кассир уже видит
+                  ошибку и повторит отправку.
+                </p>
+
+                <button
+                  onClick={() => {
+                    setPaymentStatus('idle');
+                    setActiveGuestTab('profile');
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '17px',
+                    borderRadius: '15px',
+                    border: 'none',
+                    background: '#111827',
+                    color: '#fff',
+                    fontWeight: '900',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    marginTop: '15px'
+                  }}
+                >
+                  Понятно
+                </button>
               </div>
             )}
 
@@ -1150,9 +1241,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                          <span style={{fontWeight: '900', color: '#111827'}}>{o.tableName}</span>
                          <span style={{fontWeight: '900', color: '#10b981', fontSize: '16px'}}>{o.total} ₸</span>
                        </div>
-                       <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: o.status === 'rejected' ? '#dc2626' : o.status === 'transfer_pending' ? '#f59e0b' : '#10b981'}}>
+                       <p style={{margin: '0 0 10px 0', fontSize: '12px', fontWeight: 'bold', color: o.status === 'rejected' ? '#dc2626' : o.status === 'payment_checking' ? '#f59e0b' : '#10b981'}}>
                          {o.status === 'rejected' ? (lang === 'ru' ? 'Оплата отменена' : 'Төлемнен бас тартылды') : 
-                          o.status === 'transfer_pending' ? (lang === 'ru' ? 'Ожидание проверки оплаты' : 'Төлемді тексеру күтілуде') : 
+                          o.status === 'payment_checking' ? (lang === 'ru' ? 'Ожидание проверки оплаты' : 'Төлемді тексеру күтілуде') : 
                           (lang === 'ru' ? `Оплачено (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Наличные'})` : `Төленді (${o.payMethod === 'kaspi' ? 'Kaspi' : 'Қолма-қол'})`)}
                        </p>
                        <p style={{margin: '0 0 5px 0', fontSize: '13px', color: '#4b5563', lineHeight: '1.4'}}>{o.itemsText}</p>

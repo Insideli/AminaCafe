@@ -72,6 +72,12 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const filteredTableGroups = selectedTableGroup === 'all' ? tableGroupsList.filter(g => g !== 'all') : [selectedTableGroup];
 
   useEffect(() => {
+    setPaymentDraft(
+      normalizePaymentSettings(paymentSettings)
+    );
+  }, [paymentSettings]);
+
+  useEffect(() => {
     if (currentUser && currentUser.phone) {
       const hasSeen = localStorage.getItem(`onboarding_seen_${currentUser.phone}`);
       if (!hasSeen) {
@@ -473,6 +479,65 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         </div>
       </div>
     );
+  };
+
+  const savePaymentSettings = () => {
+    const normalized =
+      normalizePaymentSettings(paymentDraft);
+
+    const recipient = String(
+      normalized.recipient || ''
+    ).trim();
+
+    const cardNumber = String(
+      normalized.cardNumber || ''
+    ).replace(/\D/g, '');
+
+    const phone = String(
+      normalized.phone || ''
+    ).trim();
+
+    const cashierName = String(
+      normalized.cashierName || ''
+    ).trim();
+
+    if (normalized.active && !recipient) {
+      alert('Укажите имя получателя.');
+      return;
+    }
+
+    if (
+      normalized.active
+      && !cardNumber
+      && !phone
+    ) {
+      alert(
+        'Укажите номер карты или телефон для перевода.'
+      );
+      return;
+    }
+
+    if (
+      cardNumber
+      && cardNumber.length !== 16
+    ) {
+      alert(
+        'Номер карты должен содержать ровно 16 цифр.'
+      );
+      return;
+    }
+
+    setPaymentSettings({
+      ...normalized,
+      recipient,
+      cardNumber,
+      phone,
+      cashierName,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser.name,
+    });
+
+    alert('✅ Реквизиты оплаты сохранены');
   };
 
   const PendingTransfersBlock = () => {
@@ -1218,9 +1283,278 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
           <button onClick={() => setAdminTab('menu')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'menu' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'menu' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📝 Меню</button>
           <button onClick={() => setAdminTab('staff')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'staff' ? '#8b5cf6' : '#e5e7eb', color: adminTab === 'staff' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>👥 Персонал</button>
           <button onClick={() => setAdminTab('tables')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'tables' ? '#ec4899' : '#e5e7eb', color: adminTab === 'tables' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🪑 Залы</button>
+          <button
+            onClick={() => setAdminTab('payments')}
+            style={{
+              whiteSpace: 'nowrap',
+              padding: '10px 20px',
+              borderRadius: '12px',
+              border: 'none',
+              backgroundColor:
+                adminTab === 'payments'
+                  ? '#10b981'
+                  : '#e5e7eb',
+              color:
+                adminTab === 'payments'
+                  ? '#fff'
+                  : '#4b5563',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            💳 Реквизиты
+          </button>
           <button onClick={() => setAdminTab('support')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: adminTab === 'support' ? '#3b82f6' : '#e5e7eb', color: adminTab === 'support' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>💬 Поддержка</button>
         </div>
         
+        {adminTab === 'payments' && (
+          <div style={{
+            padding: '0 20px 30px',
+            maxWidth: '700px',
+            margin: '0 auto'
+          }}>
+            <div style={{
+              background: '#fff',
+              border: '1px solid #d1fae5',
+              borderRadius: '20px',
+              padding: '22px'
+            }}>
+              <h2 style={{
+                margin: '0 0 8px',
+                color: '#111827'
+              }}>
+                💳 Реквизиты для перевода
+              </h2>
+
+              <p style={{
+                margin: '0 0 20px',
+                color: '#6b7280',
+                fontSize: '14px',
+                lineHeight: '1.5'
+              }}>
+                Эти данные позже увидит гость перед
+                нажатием «Я оплатил».
+              </p>
+
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '14px',
+                borderRadius: '12px',
+                background: '#ecfdf5',
+                color: '#065f46',
+                fontWeight: 'bold',
+                marginBottom: '16px'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(paymentDraft.active)}
+                  onChange={event =>
+                    setPaymentDraft(previous => ({
+                      ...previous,
+                      active: event.target.checked
+                    }))
+                  }
+                  style={{
+                    width: '20px',
+                    height: '20px'
+                  }}
+                />
+
+                Разрешить оплату переводом
+              </label>
+
+              {[
+                ['bank', 'Банк', 'Kaspi'],
+                [
+                  'recipient',
+                  'Имя получателя',
+                  'Например: Мадина А.'
+                ],
+                [
+                  'cardNumber',
+                  'Номер карты — 16 цифр',
+                  '0000 0000 0000 0000'
+                ],
+                [
+                  'phone',
+                  'Телефон для перевода',
+                  '+7XXXXXXXXXX'
+                ],
+                [
+                  'cashierName',
+                  'Кто проверяет оплату',
+                  'Кассир Мадина'
+                ],
+              ].map(([field, label, placeholder]) => (
+                <label
+                  key={field}
+                  style={{
+                    display: 'block',
+                    marginBottom: '14px'
+                  }}
+                >
+                  <span style={{
+                    display: 'block',
+                    marginBottom: '6px',
+                    color: '#374151',
+                    fontSize: '13px',
+                    fontWeight: 'bold'
+                  }}>
+                    {label}
+                  </span>
+
+                  <input
+                    type="text"
+                    value={paymentDraft[field] || ''}
+                    placeholder={placeholder}
+                    onChange={event => {
+                      let value = event.target.value;
+
+                      if (field === 'cardNumber') {
+                        value = value
+                          .replace(/\D/g, '')
+                          .slice(0, 16);
+                      }
+
+                      setPaymentDraft(previous => ({
+                        ...previous,
+                        [field]: value
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '13px',
+                      borderRadius: '11px',
+                      border: '1px solid #d1d5db',
+                      color: '#111827'
+                    }}
+                  />
+                </label>
+              ))}
+
+              <label style={{
+                display: 'block',
+                marginBottom: '14px'
+              }}>
+                <span style={{
+                  display: 'block',
+                  marginBottom: '6px',
+                  color: '#374151',
+                  fontSize: '13px',
+                  fontWeight: 'bold'
+                }}>
+                  Инструкция на русском
+                </span>
+
+                <textarea
+                  value={paymentDraft.instructionsRu || ''}
+                  onChange={event =>
+                    setPaymentDraft(previous => ({
+                      ...previous,
+                      instructionsRu: event.target.value
+                    }))
+                  }
+                  rows="3"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '13px',
+                    borderRadius: '11px',
+                    border: '1px solid #d1d5db',
+                    color: '#111827',
+                    resize: 'vertical'
+                  }}
+                />
+              </label>
+
+              <label style={{
+                display: 'block',
+                marginBottom: '16px'
+              }}>
+                <span style={{
+                  display: 'block',
+                  marginBottom: '6px',
+                  color: '#374151',
+                  fontSize: '13px',
+                  fontWeight: 'bold'
+                }}>
+                  Қазақша нұсқаулық
+                </span>
+
+                <textarea
+                  value={paymentDraft.instructionsKz || ''}
+                  onChange={event =>
+                    setPaymentDraft(previous => ({
+                      ...previous,
+                      instructionsKz: event.target.value
+                    }))
+                  }
+                  rows="3"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '13px',
+                    borderRadius: '11px',
+                    border: '1px solid #d1d5db',
+                    color: '#111827',
+                    resize: 'vertical'
+                  }}
+                />
+              </label>
+
+              <div style={{
+                padding: '14px',
+                borderRadius: '12px',
+                background: '#f3f4f6',
+                color: '#374151',
+                lineHeight: '1.6',
+                marginBottom: '16px'
+              }}>
+                <b>Предпросмотр:</b>
+                <br />
+
+                {paymentDraft.bank || 'Банк'}
+                {' • '}
+                {paymentDraft.recipient || 'Получатель'}
+
+                <br />
+
+                {formatPaymentTarget(
+                  getPaymentTarget(paymentDraft)
+                ) || 'Реквизиты ещё не указаны'}
+
+                {paymentDraft.cashierName && (
+                  <>
+                    <br />
+                    Проверяет:{' '}
+                    <b>{paymentDraft.cashierName}</b>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={savePaymentSettings}
+                style={{
+                  width: '100%',
+                  padding: '15px',
+                  border: 'none',
+                  borderRadius: '12px',
+                  background: '#10b981',
+                  color: '#fff',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                Сохранить реквизиты
+              </button>
+            </div>
+          </div>
+        )}
+
         {adminTab === 'support' && renderSupportPanel()}
 
         {adminTab === 'stats' && (

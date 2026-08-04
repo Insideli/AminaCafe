@@ -381,7 +381,10 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
       waiterName: assignedWaiterName, 
       isReviewed: false, 
       reviewUnlockTime: null, 
-      payMethod 
+      paymentDetails: {
+        ...activePaymentSettings
+      },
+      payMethod
     };
   };
 

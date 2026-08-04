@@ -305,6 +305,9 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
        date: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
        status: 'payment_checking',
        payMethod: 'kaspi',
+       paymentDetails: {
+         ...activePaymentSettings
+       },
        bookedTime: bookingTime
     };
     setOrders(prev => [newOrder, ...(prev || [])]);
@@ -787,7 +790,21 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <button onClick={() => setPaymentStatus('idle')} style={{background: '#f3f4f6', border: 'none', width: '32px', height: '32px', borderRadius: '50%', fontWeight: 'bold', cursor: 'pointer', color: '#4b5563'}}>✕</button>
                 </div>
                 
-                <div className="pay-method-btn" onClick={() => setPaymentStatus('kaspi_card')}>
+                <div
+                  className="pay-method-btn"
+                  onClick={() => {
+                    if (!canUseTransfer) {
+                      alert(
+                        lang === 'ru'
+                          ? 'Оплата переводом временно недоступна.'
+                          : 'Аударым арқылы төлем уақытша қолжетімсіз.'
+                      );
+                      return;
+                    }
+
+                    setPaymentStatus('kaspi_card');
+                  }}
+                >
                   <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
                     <div style={{background: '#eff6ff', padding: '10px', borderRadius: '12px', fontSize: '24px'}}>💳</div>
                     <div>
@@ -859,12 +876,48 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <p style={{margin: '0 0 20px 0', fontSize: '36px', fontWeight: '900', color: '#ea580c'}}>{totalAmount} ₸</p>
                   
                   <div style={{textAlign: 'left'}}>
-                    <p style={{margin: '0 0 8px 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>Номер карты (Visa / Mastercard)</p>
+                    <p style={{margin: '0 0 8px 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>
+                      {getPaymentTargetLabel(activePaymentSettings)}
+                      {' • '}
+                      {activePaymentSettings.bank}
+                    </p>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '15px', borderRadius: '14px', border: '2px dashed #d1d5db'}}>
-                      <span style={{fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#111827'}}>4400 4302 5493 5945</span>
-                      <button onClick={() => copyToClipboard('4400430254935945')} style={{background: '#111827', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px'}}>Копия</button>
+                      <span style={{fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#111827'}}>
+                        {formatPaymentTarget(paymentTarget)}
+                      </span>
+                      <button onClick={() => copyToClipboard(paymentTarget)} style={{background: '#111827', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px'}}>Копия</button>
                     </div>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px'}}><span style={{color: '#10b981', fontSize: '18px'}}>✓</span><span style={{fontSize: '14px', color: '#111827', fontWeight: 'bold'}}>Получатель: Эльвира А.</span></div>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px'}}>
+                      <span style={{color: '#10b981', fontSize: '18px'}}>✓</span>
+                      <span style={{fontSize: '14px', color: '#111827', fontWeight: 'bold'}}>
+                        Получатель: {activePaymentSettings.recipient}
+                      </span>
+                    </div>
+
+                    {activePaymentSettings.cashierName && (
+                      <p style={{
+                        margin: '8px 0 0 26px',
+                        color: '#6b7280',
+                        fontSize: '13px'
+                      }}>
+                        Проверяет оплату:{' '}
+                        <b>{activePaymentSettings.cashierName}</b>
+                      </p>
+                    )}
+
+                    <p style={{
+                      margin: '12px 0 0',
+                      padding: '10px',
+                      borderRadius: '10px',
+                      background: '#eff6ff',
+                      color: '#1e40af',
+                      fontSize: '13px',
+                      lineHeight: '1.45'
+                    }}>
+                      {lang === 'ru'
+                        ? activePaymentSettings.instructionsRu
+                        : activePaymentSettings.instructionsKz}
+                    </p>
                   </div>
                 </div>
                 <button onClick={confirmTransfer} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'}}>Я перевел({currentUser.name ? 'а' : ''}) деньги</button>
@@ -885,12 +938,48 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
                   <p style={{margin: '0 0 20px 0', fontSize: '36px', fontWeight: '900', color: '#ea580c'}}>1000 ₸</p>
                   
                   <div style={{textAlign: 'left'}}>
-                    <p style={{margin: '0 0 8px 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>Номер карты (Visa / Mastercard)</p>
+                    <p style={{margin: '0 0 8px 0', fontSize: '13px', color: '#6b7280', fontWeight: 'bold'}}>
+                      {getPaymentTargetLabel(activePaymentSettings)}
+                      {' • '}
+                      {activePaymentSettings.bank}
+                    </p>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '15px', borderRadius: '14px', border: '2px dashed #d1d5db'}}>
-                      <span style={{fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#111827'}}>4400 4302 5493 5945</span>
-                      <button onClick={() => copyToClipboard('4400430254935945')} style={{background: '#111827', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px'}}>Копия</button>
+                      <span style={{fontSize: '20px', fontWeight: '900', letterSpacing: '1px', color: '#111827'}}>
+                        {formatPaymentTarget(paymentTarget)}
+                      </span>
+                      <button onClick={() => copyToClipboard(paymentTarget)} style={{background: '#111827', border: 'none', padding: '10px 15px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', color: '#fff', fontSize: '13px'}}>Копия</button>
                     </div>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px'}}><span style={{color: '#10b981', fontSize: '18px'}}>✓</span><span style={{fontSize: '14px', color: '#111827', fontWeight: 'bold'}}>Получатель: Эльвира А.</span></div>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px'}}>
+                      <span style={{color: '#10b981', fontSize: '18px'}}>✓</span>
+                      <span style={{fontSize: '14px', color: '#111827', fontWeight: 'bold'}}>
+                        Получатель: {activePaymentSettings.recipient}
+                      </span>
+                    </div>
+
+                    {activePaymentSettings.cashierName && (
+                      <p style={{
+                        margin: '8px 0 0 26px',
+                        color: '#6b7280',
+                        fontSize: '13px'
+                      }}>
+                        Проверяет оплату:{' '}
+                        <b>{activePaymentSettings.cashierName}</b>
+                      </p>
+                    )}
+
+                    <p style={{
+                      margin: '12px 0 0',
+                      padding: '10px',
+                      borderRadius: '10px',
+                      background: '#eff6ff',
+                      color: '#1e40af',
+                      fontSize: '13px',
+                      lineHeight: '1.45'
+                    }}>
+                      {lang === 'ru'
+                        ? activePaymentSettings.instructionsRu
+                        : activePaymentSettings.instructionsKz}
+                    </p>
                   </div>
                 </div>
                 <button onClick={confirmBookingTransfer} style={{width: '100%', padding: '18px', borderRadius: '16px', border: 'none', background: '#10b981', color: '#fff', fontWeight: '900', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'}}>Я перевел(а) 1000 ₸</button>

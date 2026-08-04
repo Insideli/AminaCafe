@@ -2,6 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES, STORIES, INITIAL_TABLES, INITIAL_CUSTOMERS, INITIAL_ROLES, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 import { createOrderId } from './utils/orderId.js';
+import {
+  DEFAULT_PAYMENT_SETTINGS,
+  normalizePaymentSettings,
+  getPaymentTarget,
+  getPaymentTargetLabel,
+  formatPaymentTarget,
+} from './paymentSettings.js';
 
 export default function GuestApp({ currentUser, logout, lang, setLang, deferredPrompt }) {
   const [menu, setMenu] = useLocalStorage('amina_pinta_menu_v1', INITIAL_MENU);
@@ -14,6 +21,22 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
   const [reviews, setReviews] = useLocalStorage('amina_pinta_reviews_v1', []); 
   
   const [supportChat, setSupportChat] = useLocalStorage('amina_pinta_support_v1', INITIAL_SUPPORT);
+  const [paymentSettings] = useLocalStorage(
+    'amina_pinta_payment_settings_v1',
+    DEFAULT_PAYMENT_SETTINGS
+  );
+
+  const activePaymentSettings =
+    normalizePaymentSettings(paymentSettings);
+
+  const paymentTarget =
+    getPaymentTarget(activePaymentSettings);
+
+  const canUseTransfer = Boolean(
+    activePaymentSettings.active
+    && activePaymentSettings.recipient
+    && paymentTarget
+  );
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [supportText, setSupportText] = useState('');
 

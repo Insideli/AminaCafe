@@ -3,6 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { INITIAL_MENU, CATEGORIES as DEFAULT_CATEGORIES, INITIAL_TABLES, INITIAL_ROLES, INITIAL_CUSTOMERS, INITIAL_SUPPORT, useLocalStorage } from './data.js';
 import { submitOrderToPaloma, syncPalomaCatalog, testPalomaConnection } from './paloma.js';
 import { createOrderId } from './utils/orderId.js';
+import {
+  DEFAULT_PAYMENT_SETTINGS,
+  normalizePaymentSettings,
+  getPaymentTarget,
+  getPaymentTargetLabel,
+  formatPaymentTarget,
+} from './paymentSettings.js';
 
 export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [menu, setMenu] = useLocalStorage('amina_pinta_menu_v1', INITIAL_MENU);
@@ -15,12 +22,19 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   const [customers, setCustomers] = useLocalStorage('amina_pinta_customers_v1', INITIAL_CUSTOMERS);
 
   const [supportChat, setSupportChat] = useLocalStorage('amina_pinta_support_v1', INITIAL_SUPPORT);
+  const [paymentSettings, setPaymentSettings] = useLocalStorage(
+    'amina_pinta_payment_settings_v1',
+    DEFAULT_PAYMENT_SETTINGS
+  );
   const [activeSupportPhone, setActiveSupportPhone] = useState(null);
   const [supportAdminText, setSupportAdminText] = useState('');
 
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [palomaStatus, setPalomaStatus] = useState({ state: 'idle', message: 'Связь ещё не проверялась' });
   const [paymentActionId, setPaymentActionId] = useState(null);
+  const [paymentDraft, setPaymentDraft] = useState(
+    () => normalizePaymentSettings(paymentSettings)
+  );
 
   const [adminTab, setAdminTab] = useState('stats'); 
   const [adminMenuCategory, setAdminMenuCategory] = useState('all');

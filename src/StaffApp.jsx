@@ -61,7 +61,9 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
   
   const [activeOrdersList, setActiveOrdersList] = useState(null); 
   
-  const [cashierTab, setCashierTab] = useState('orders'); 
+  const [cashierTab, setCashierTab] = useState('orders');
+  const [cashierOrderFilter, setCashierOrderFilter] =
+    useState('waiting'); 
   const [cashierCart, setCashierCart] = useState({});
   const [cashierOrderType, setCashierOrderType] = useState('takeaway');
   // 🔥 ДОБАВЛЕНЫ ПОИСК И КАТЕГОРИИ ДЛЯ КАССИРА
@@ -1123,6 +1125,112 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
       return matchSearch && matchCat;
     });
 
+    const cashierOrders = (orders || [])
+      .filter(order =>
+        order.orderType !== 'in_hall'
+        && order.orderType !== 'booking_deposit'
+      )
+      .sort((first, second) => {
+        const firstTime = new Date(
+          first.payment?.confirmedAt
+          || first.palomaSync?.syncedAt
+          || first.date
+          || 0
+        ).getTime();
+
+        const secondTime = new Date(
+          second.payment?.confirmedAt
+          || second.palomaSync?.syncedAt
+          || second.date
+          || 0
+        ).getTime();
+
+        return secondTime - firstTime;
+      });
+
+    const filteredCashierOrders =
+      cashierOrders.filter(order => {
+        if (cashierOrderFilter === 'all') return true;
+
+        if (cashierOrderFilter === 'waiting') {
+          return [
+            'payment_checking',
+            'sending_to_paloma',
+          ].includes(order.status);
+        }
+
+        if (cashierOrderFilter === 'sent') {
+          return (
+            order.status === 'sent_to_paloma'
+            || order.palomaSync?.status === 'synced'
+          );
+        }
+
+        if (cashierOrderFilter === 'error') {
+          return (
+            order.status === 'paloma_error'
+            || order.palomaSync?.status === 'failed'
+          );
+        }
+
+        if (cashierOrderFilter === 'rejected') {
+          return [
+            'payment_rejected',
+            'cancelled',
+            'rejected',
+            'declined',
+          ].includes(order.status);
+        }
+
+        return true;
+      });
+
+    const getCashierOrderStatus = order => {
+      if (
+        order.status === 'sent_to_paloma'
+        || order.palomaSync?.status === 'synced'
+      ) {
+        return {
+          label: '✅ Отправлен в Paloma',
+          background: '#d1fae5',
+          color: '#065f46',
+        };
+      }
+
+      if (
+        order.status === 'paloma_error'
+        || order.palomaSync?.status === 'failed'
+      ) {
+        return {
+          label: '⚠️ Ошибка Paloma',
+          background: '#fee2e2',
+          color: '#b91c1c',
+        };
+      }
+
+      if (order.status === 'sending_to_paloma') {
+        return {
+          label: '🔄 Отправляется',
+          background: '#dbeafe',
+          color: '#1d4ed8',
+        };
+      }
+
+      if (order.status === 'payment_checking') {
+        return {
+          label: '⏳ Проверка оплаты',
+          background: '#fef3c7',
+          color: '#92400e',
+        };
+      }
+
+      return {
+        label: '❌ Отклонён',
+        background: '#f3f4f6',
+        color: '#4b5563',
+      };
+    };
+
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'Arial', paddingBottom: '80px' }}>
         {renderInfoModal()}
@@ -1132,43 +1240,266 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
         </header>
         
         <div style={{ display: 'flex', gap: '10px', padding: '20px', justifyContent: 'flex-start', overflowX: 'auto', backgroundColor: '#fff', borderBottom: '1px solid #e5e7eb' }}>
-          <button onClick={() => setCashierTab('orders')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'orders' ? '#10b981' : '#f3f4f6', color: cashierTab === 'orders' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🔔 Оплаты</button>
+          <button onClick={() => setCashierTab('orders')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'orders' ? '#10b981' : '#f3f4f6', color: cashierTab === 'orders' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📦 Заказы</button>
           <button onClick={() => setCashierTab('pos')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'pos' ? '#3b82f6' : '#f3f4f6', color: cashierTab === 'pos' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>🛒 Новый заказ</button>
           <button onClick={() => setCashierTab('report')} style={{ whiteSpace: 'nowrap', padding: '10px 20px', borderRadius: '12px', border: 'none', backgroundColor: cashierTab === 'report' ? '#8b5cf6' : '#f3f4f6', color: cashierTab === 'report' ? '#fff' : '#4b5563', fontWeight: 'bold', cursor: 'pointer' }}>📊 X-Отчет</button>
         </div>
 
         {cashierTab === 'orders' && (
-          <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
-            <PendingTransfersBlock />
-            {cashPendingTables.map(table => {
-               const orderForTable = (orders || []).find(o => o.tableId === table.id && (o.status === 'cash_pending' || o.status === 'new'));
-               const guestPhone = table.bookedBy || orderForTable?.phone;
-               const guestInfo = customers[guestPhone] || { name: 'Гость' };
-               const waiterName = table.servedBy ? roles[table.servedBy]?.name : (orderForTable?.waiterName || 'Неизвестно');
-               return (
-                 <div key={`c-bill-${table.id}`} style={{ backgroundColor: '#fee2e2', border: '2px solid #dc2626', padding: '20px', borderRadius: '16px', marginBottom: '15px' }}>
-                    <h3 style={{ color: '#991b1b', margin: '0 0 10px 0' }}>🏃 Просят счет (Наличные / Kaspi)</h3>
-                    <p style={{margin: '0 0 5px 0', fontSize: '15px', color: '#111827'}}>Стол: <b>{table.name}</b></p>
-                    <p style={{margin: '0 0 5px 0', fontSize: '14px', color: '#4b5563'}}>Гость: <b>{guestInfo.name} {guestPhone ? `(${guestPhone})` : ''}</b></p>
-                    <p style={{margin: '0 0 10px 0', fontSize: '14px', color: '#4b5563'}}>Официант: <b>{waiterName}</b></p>
-                    <p style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#111827', fontWeight: 'bold' }}>К оплате: {orderForTable?.total || '?'} ₸</p>
-                    <div style={{display: 'flex', gap: '10px'}}>
-                      <button onClick={() => { 
-                         setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
-                         if(orderForTable) { 
-                           changeOrderStatus(orderForTable.id, 'delivered', 'kaspi');
-                         } 
-                      }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Оплата Kaspi</button>
-                      <button onClick={() => { 
-                         setTables(prev => (prev || []).map(t => t.id === table.id ? { ...t, isCallingForBill: false, status: 'free', bookedBy: null, servedBy: null, isCalling: false, calledWaiter: null } : t)); 
-                         if(orderForTable) { 
-                           changeOrderStatus(orderForTable.id, 'delivered', 'cash');
-                         }
-                      }} style={{ flex: 1, minWidth: 0, padding: '12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>Наличными</button>
-                    </div>
-                 </div>
-               )
-            })}
+          <div style={{
+            padding: '20px',
+            maxWidth: '850px',
+            margin: '0 auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginBottom: '16px'
+            }}>
+              <div>
+                <h2 style={{
+                  margin: '0 0 5px',
+                  color: '#111827'
+                }}>
+                  📦 Заказы
+                </h2>
+
+                <p style={{
+                  margin: 0,
+                  color: '#6b7280',
+                  fontSize: '13px'
+                }}>
+                  Проверка оплат и история Paloma
+                </p>
+              </div>
+
+              <b style={{
+                padding: '8px 12px',
+                borderRadius: '10px',
+                background: '#ecfdf5',
+                color: '#065f46'
+              }}>
+                Всего: {cashierOrders.length}
+              </b>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              overflowX: 'auto',
+              paddingBottom: '12px',
+              marginBottom: '12px'
+            }}>
+              {[
+                ['waiting', '⏳ Ожидают'],
+                ['sent', '✅ В Paloma'],
+                ['error', '⚠️ Ошибки'],
+                ['rejected', '❌ Отклонённые'],
+                ['all', '📋 Все'],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() =>
+                    setCashierOrderFilter(id)
+                  }
+                  style={{
+                    whiteSpace: 'nowrap',
+                    padding: '10px 14px',
+                    border: 'none',
+                    borderRadius: '10px',
+                    background:
+                      cashierOrderFilter === id
+                        ? '#111827'
+                        : '#fff',
+                    color:
+                      cashierOrderFilter === id
+                        ? '#fff'
+                        : '#4b5563',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {cashierOrderFilter === 'waiting' && (
+              <PendingTransfersBlock />
+            )}
+
+            {cashierOrderFilter !== 'waiting' && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                {filteredCashierOrders.length === 0 ? (
+                  <div style={{
+                    padding: '35px 20px',
+                    background: '#fff',
+                    borderRadius: '16px',
+                    textAlign: 'center',
+                    color: '#6b7280'
+                  }}>
+                    Заказов с таким статусом пока нет.
+                  </div>
+                ) : (
+                  filteredCashierOrders.map(order => {
+                    const status =
+                      getCashierOrderStatus(order);
+
+                    const guest =
+                      customers[order.phone]
+                      || {
+                        name:
+                          order.customerName
+                          || 'Гость'
+                      };
+
+                    const palomaOrderId =
+                      order.palomaSync?.palomaOrderId
+                      || order.palomaOrderId
+                      || null;
+
+                    return (
+                      <div
+                        key={order.id}
+                        style={{
+                          padding: '16px',
+                          borderRadius: '16px',
+                          background: '#fff',
+                          border: '1px solid #e5e7eb'
+                        }}
+                      >
+                        <div style={{
+                          display: 'flex',
+                          justifyContent:
+                            'space-between',
+                          gap: '10px',
+                          marginBottom: '10px'
+                        }}>
+                          <div>
+                            <b style={{
+                              color: '#111827'
+                            }}>
+                              {order.tableName
+                                || (
+                                  order.orderType
+                                  === 'delivery'
+                                    ? 'Доставка'
+                                    : 'Навынос'
+                                )}
+                            </b>
+
+                            <div style={{
+                              color: '#6b7280',
+                              fontSize: '11px',
+                              marginTop: '4px'
+                            }}>
+                              {order.id}
+                            </div>
+                          </div>
+
+                          <span style={{
+                            height: 'fit-content',
+                            padding: '6px 9px',
+                            borderRadius: '8px',
+                            background:
+                              status.background,
+                            color: status.color,
+                            fontWeight: 'bold',
+                            fontSize: '12px'
+                          }}>
+                            {status.label}
+                          </span>
+                        </div>
+
+                        <p style={{
+                          margin: '0 0 5px',
+                          color: '#4b5563'
+                        }}>
+                          Гость: <b>{guest.name}</b>
+                        </p>
+
+                        <p style={{
+                          margin: '0 0 5px',
+                          color: '#4b5563'
+                        }}>
+                          Состав:{' '}
+                          <b>
+                            {order.itemsText
+                              || 'Не указан'}
+                          </b>
+                        </p>
+
+                        <p style={{
+                          margin: '0 0 8px',
+                          color: '#111827'
+                        }}>
+                          Сумма:{' '}
+                          <b>{order.total || 0} ₸</b>
+                        </p>
+
+                        {palomaOrderId && (
+                          <p style={{
+                            color: '#065f46',
+                            fontWeight: 'bold',
+                            fontSize: '12px'
+                          }}>
+                            ID Paloma: {palomaOrderId}
+                          </p>
+                        )}
+
+                        {order.palomaSync?.error && (
+                          <div style={{
+                            padding: '10px',
+                            background: '#fee2e2',
+                            color: '#b91c1c',
+                            borderRadius: '10px',
+                            fontSize: '12px'
+                          }}>
+                            {order.palomaSync.error}
+                          </div>
+                        )}
+
+                        {order.status
+                          === 'paloma_error' && (
+                          <button
+                            disabled={
+                              paymentActionId
+                              === order.id
+                            }
+                            onClick={() =>
+                              confirmGuestPayment(
+                                order,
+                                guest.name
+                              )
+                            }
+                            style={{
+                              width: '100%',
+                              marginTop: '10px',
+                              padding: '12px',
+                              border: 'none',
+                              borderRadius: '10px',
+                              background: '#10b981',
+                              color: '#fff',
+                              fontWeight: 'bold',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🔄 Повторить отправку
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -257,10 +257,27 @@ export default function GuestApp({ currentUser, logout, lang, setLang, deferredP
 
   const initiateBooking = (id) => { setPreOrderTableId(id); setShowTimeModal(true); };
   
-  const confirmBookingTime = () => { 
-    if (!bookingTime) return alert("Выберите время!"); 
+  const confirmBookingTime = () => {
+    if (!bookingTime) {
+      alert(
+        lang === 'ru'
+          ? 'Выберите время!'
+          : 'Уақытты таңдаңыз!'
+      );
+      return;
+    }
+
+    if (!canUseTransfer) {
+      alert(
+        lang === 'ru'
+          ? 'Оплата переводом временно недоступна.'
+          : 'Аударым арқылы төлем уақытша қолжетімсіз.'
+      );
+      return;
+    }
+
     setPaymentStatus('kaspi_card_booking');
-    setShowTimeModal(false); 
+    setShowTimeModal(false);
   };
 
   const confirmBookingTransfer = () => {

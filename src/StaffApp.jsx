@@ -574,6 +574,15 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
             name: order.customerName || 'Гость'
           };
 
+          const transferAccount =
+            normalizePaymentSettings(
+              order.paymentDetails
+              || paymentSettings
+            );
+
+          const transferTarget =
+            getPaymentTarget(transferAccount);
+
           const isSending = order.status === 'sending_to_paloma';
           const isPalomaError = order.status === 'paloma_error';
           const isBusy = paymentActionId === order.id || isSending;
@@ -628,6 +637,63 @@ export default function StaffApp({ currentUser, logout, lang, setLang }) {
                   {order.total} ₸
                 </b>
               </p>
+
+              <div style={{
+                margin: '0 0 14px',
+                padding: '12px',
+                borderRadius: '12px',
+                background: '#fff',
+                border: '1px dashed #f59e0b',
+                color: '#374151',
+                fontSize: '13px',
+                lineHeight: '1.6'
+              }}>
+                <b style={{ color: '#92400e' }}>
+                  💳 Куда должен поступить перевод
+                </b>
+
+                <div style={{ marginTop: '7px' }}>
+                  Банк:{' '}
+                  <b>
+                    {transferAccount.bank || 'Не указан'}
+                  </b>
+                </div>
+
+                <div>
+                  Получатель:{' '}
+                  <b>
+                    {transferAccount.recipient
+                      || 'Не указан'}
+                  </b>
+                </div>
+
+                <div>
+                  {getPaymentTargetLabel(transferAccount)}
+                  {': '}
+                  <b style={{ overflowWrap: 'anywhere' }}>
+                    {formatPaymentTarget(transferTarget)
+                      || 'Не указан'}
+                  </b>
+                </div>
+
+                {transferAccount.cashierName && (
+                  <div>
+                    Проверяет оплату:{' '}
+                    <b>{transferAccount.cashierName}</b>
+                  </div>
+                )}
+
+                {order.paymentDetails && (
+                  <div style={{
+                    marginTop: '7px',
+                    color: '#6b7280',
+                    fontSize: '12px'
+                  }}>
+                    Реквизиты сохранены в момент
+                    оформления заказа.
+                  </div>
+                )}
+              </div>
 
               {isSending && (
                 <p style={{
